@@ -581,14 +581,14 @@
 
 **Acceptance Criteria**:
 
-- [ ] `.env` file created on the host machine with `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET`
-- [ ] Bot started with `uv run python -m github_status_bot.slack_handler` and left running
-- [ ] Bot reconnects automatically if the WebSocket drops (slack-bolt handles this)
-- [ ] Process kept alive across terminal sessions (e.g. `nohup`, `screen`, `tmux`, or a system service)
+- [x] `.env` file created on the host machine with `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET`
+- [x] Bot started and responding to `@`-mentions
+- [x] Bot reconnects automatically if the WebSocket drops (slack-bolt handles this)
+- [ ] Process kept alive in a named tmux session: `tmux new-session -d -s github-bot 'uv run python -m github_status_bot.slack_handler'`
 
 **Definition of Done**:
 
-- [ ] Bot running persistently; any team member can `@`-mention it and receive a reply
+- [ ] Bot running in tmux session `github-bot`; any team member can `@`-mention it and receive a reply
 
 **Git Workflow**:
 
@@ -612,7 +612,7 @@
 
 **Acceptance Criteria**:
 
-- [ ] 20 consecutive `@github_status_bot` mentions across different channels — every mention receives exactly one reply
+- [ ] 20 consecutive `@github_status_bot` mentions — every mention receives exactly one reply
 - [ ] At least one mention in a thread — reply appears in thread
 - [ ] At least one mention while GitHub Status API is blocked — error reply returned, not silence
 - [ ] No unsolicited messages during a 1-hour monitoring window
@@ -638,8 +638,8 @@
 
 - [ ] README covers: prerequisites (`uv`, Slack app setup)
 - [ ] README covers: creating `.env` from `.env.example`
-- [ ] README covers: starting the bot (`uv run python -m github_status_bot.slack_handler`)
-- [ ] README covers: keeping the bot alive (tmux / nohup / system service)
+- [ ] README covers: starting the bot in a tmux session (`tmux new-session -d -s github-bot '...'`)
+- [ ] README covers: attaching/detaching from the tmux session and stopping the bot
 - [ ] README covers: rotating Slack tokens (update `.env`, restart process)
 - [ ] `.env.example` describes all variables with one-line explanations
 

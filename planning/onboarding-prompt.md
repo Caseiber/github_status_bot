@@ -301,12 +301,15 @@ uv run ruff check src/ tests/
 # Type check
 uv run mypy --strict src/
 
-# Start the bot (requires .env populated — see .env.example)
-uv run python -m github_status_bot.slack_handler
+# Start the bot in a persistent tmux session (survives terminal close)
+tmux new-session -d -s github-bot 'uv run python -m github_status_bot.slack_handler'
 
-# Keep running across terminal sessions
-nohup uv run python -m github_status_bot.slack_handler &> bot.log &
-# or use tmux/screen
+# Attach to watch logs
+tmux attach -t github-bot
+# Detach without stopping: Ctrl-b d
+
+# Stop the bot
+tmux kill-session -t github-bot
 ```
 
 ---
