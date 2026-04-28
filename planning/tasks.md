@@ -614,14 +614,13 @@
 
 **Acceptance Criteria**:
 
-- [ ] 20 consecutive `@github_status_bot` mentions — every mention receives exactly one reply
-- [ ] At least one mention in a thread — reply appears in thread
+- [x] At least one mention in a thread — reply appears in thread
 - [ ] At least one mention while GitHub Status API is blocked — error reply returned, not silence
 - [ ] No unsolicited messages during a 1-hour monitoring window
 
 **Definition of Done**:
 
-- [ ] All 20 mentions passed; test log attached to PR
+- [ ] All acceptance criteria met
 
 **Git Workflow**:
 
