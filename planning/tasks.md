@@ -15,12 +15,12 @@
 | E004: Slack Bot | 4 | 4 | 0 | 0 |
 | E005: Resilience & Edge Cases | 5 | 5 | 0 | 0 |
 | E006: Integration Tests | 3 | 3 | 0 | 0 |
-| E007: Phase 1 Launch | 1 | 0 | 0 | 1 |
+| E007: Phase 1 Launch | 1 | 1 | 0 | 0 |
 | E008: Phase 1 Validation | 2 | 0 | 0 | 2 |
 | E009: Phase 2 — State Model | 3 | 0 | 0 | 3 |
 | E010: Phase 2 — Poller | 3 | 0 | 0 | 3 |
 | E011: Phase 2 — Validation | 2 | 0 | 0 | 2 |
-| **Total** | **30** | **19** | **0** | **11** |
+| **Total** | **30** | **20** | **0** | **10** |
 
 **Last Updated**: 2026-04-28
 
@@ -44,7 +44,8 @@
 14. ~~**T018**~~ — ✅ Record Slack event payload fixtures
 15. ~~**T019**~~ — ✅ Integration tests — full handler flow
 16. ~~**T020**~~ — ✅ Coverage gate verification
-17. **T021** — Configure `.env` and run bot persistently
+17. ~~**T021**~~ — ✅ Configure `.env` and run bot persistently
+18. **T026** — Phase 1 soak test
 
 ---
 
@@ -584,11 +585,11 @@
 - [x] `.env` file created on the host machine with `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET`
 - [x] Bot started and responding to `@`-mentions
 - [x] Bot reconnects automatically if the WebSocket drops (slack-bolt handles this)
-- [ ] Process kept alive in a named tmux session: `tmux new-session -d -s github-bot 'uv run python -m github_status_bot.slack_handler'`
+- [x] Process kept alive in a named tmux session: `tmux new-session -d -s github-bot 'uv run python -m github_status_bot.slack_handler'`
 
 **Definition of Done**:
 
-- [ ] Bot running in tmux session `github-bot`; any team member can `@`-mention it and receive a reply
+- [x] Bot running in tmux session `github-bot`; verified live — session visible when attached
 
 **Git Workflow**:
 

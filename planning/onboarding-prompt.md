@@ -302,6 +302,7 @@ uv run ruff check src/ tests/
 uv run mypy --strict src/
 
 # Start the bot in a persistent tmux session (survives terminal close)
+# Install tmux first if needed: brew install tmux (Mac) or sudo apt-get install -y tmux (Linux)
 tmux new-session -d -s github-bot 'uv run python -m github_status_bot.slack_handler'
 
 # Attach to watch logs
