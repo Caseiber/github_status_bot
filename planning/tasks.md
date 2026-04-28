@@ -470,7 +470,7 @@
 
 **Definition of Done**:
 
-- [x] All acceptance criteria met; verified manually in workspace
+- [x] All acceptance criteria met; verified live — bot replies in channel when tagged in channel, stays in thread when tagged in thread
 
 **Git Workflow**:
 
