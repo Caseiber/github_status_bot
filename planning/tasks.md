@@ -14,13 +14,13 @@
 | E003: Verdict Engine | 2 | 2 | 0 | 0 |
 | E004: Slack Bot | 4 | 4 | 0 | 0 |
 | E005: Resilience & Edge Cases | 5 | 5 | 0 | 0 |
-| E006: Integration Tests | 3 | 0 | 0 | 3 |
+| E006: Integration Tests | 3 | 3 | 0 | 0 |
 | E007: Phase 1 Launch | 1 | 0 | 0 | 1 |
 | E008: Phase 1 Validation | 2 | 0 | 0 | 2 |
 | E009: Phase 2 — State Model | 3 | 0 | 0 | 3 |
 | E010: Phase 2 — Poller | 3 | 0 | 0 | 3 |
 | E011: Phase 2 — Validation | 2 | 0 | 0 | 2 |
-| **Total** | **30** | **16** | **0** | **14** |
+| **Total** | **30** | **19** | **0** | **11** |
 
 **Last Updated**: 2026-04-28
 
@@ -41,7 +41,10 @@
 11. ~~**T012**~~ — ✅ Socket-mode runner and `.env.example`
 12. ~~**T013**~~ — ✅ Handle GitHub Status API unreachable
 13. ~~**T014**~~ — ✅ Handle missing `started_at` on incidents
-14. **T018** — Record Slack event payload fixtures
+14. ~~**T018**~~ — ✅ Record Slack event payload fixtures
+15. ~~**T019**~~ — ✅ Integration tests — full handler flow
+16. ~~**T020**~~ — ✅ Coverage gate verification
+17. **T021** — Configure `.env` and run bot persistently
 
 ---
 
@@ -491,18 +494,18 @@
 
 **Acceptance Criteria**:
 
-- [ ] `tests/fixtures/slack_mention_channel.json` — `app_mention` event from channel root
-- [ ] `tests/fixtures/slack_mention_thread.json` — `app_mention` event from a thread
-- [ ] `tests/fixtures/slack_mention_retry.json` — payload simulating a Slack retry
-- [ ] All payloads anonymized (no real user/channel IDs)
+- [x] `tests/fixtures/slack_mention_channel.json` — `app_mention` event from channel root
+- [x] `tests/fixtures/slack_mention_thread.json` — `app_mention` event from a thread
+- [x] `tests/fixtures/slack_mention_retry.json` — payload simulating a Slack retry (same `event_id` as channel fixture)
+- [x] All payloads anonymized (no real user/channel IDs)
 
 **Definition of Done**:
 
-- [ ] Fixtures committed under `tests/fixtures/`
+- [x] Fixtures committed under `tests/fixtures/`
 
 **Git Workflow**:
 
-- Branch: `feat/t018-slack-fixtures`
+- Branch: `feat/component-status-display`
 
 ---
 
@@ -515,25 +518,27 @@
 
 **Acceptance Criteria**:
 
-- [ ] Test: channel mention + GitHub up → `say()` with "up" copy
-- [ ] Test: channel mention + GitHub down with `started_at` → `say()` with "down" + duration
-- [ ] Test: thread mention → `say()` includes `thread_ts`
-- [ ] Test: API unreachable → `say()` with error copy
-- [ ] Test: duplicate `event_id` → exactly one `say()` call
-- [ ] Test: two mentions same channel within 5s → one `say()` call
-- [ ] All external HTTP mocked with `pytest-httpx`
+- [x] Test: channel mention + GitHub up → `say()` with "up" copy
+- [x] Test: channel mention + GitHub down with `started_at` → `say()` with "down" + duration
+- [x] Test: thread mention → `say()` includes `thread_ts`
+- [x] Test: API unreachable → `say()` with error copy
+- [x] Test: duplicate `event_id` → exactly one `say()` call
+- [x] Test: two mentions same channel within 5s → one `say()` call
+- [x] All external HTTP mocked with `pytest-httpx`
+- [x] Test: components endpoint failure → reply sent without Affected Area line
+- [x] Test: down + missing `started_at` → reply sent without Time Down line
 
 **Testing Requirements**:
 
-- [ ] `uv run pytest tests/test_integration.py -v` passes; no live network or Slack calls
+- [x] `uv run pytest tests/test_integration.py -v` passes; no live network or Slack calls
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met; overall coverage ≥ 85%
+- [x] All acceptance criteria met; overall coverage 100% (≥ 85% gate enforced)
 
 **Git Workflow**:
 
-- Branch: `feat/t019-integration-tests`
+- Branch: `feat/component-status-display`
 
 ---
 
@@ -546,17 +551,17 @@
 
 **Acceptance Criteria**:
 
-- [ ] `pyproject.toml` sets `--cov-fail-under=85` for overall coverage
-- [ ] `verdict.py` and `formatter.py` maintain 100% coverage
-- [ ] Coverage report shows per-file breakdown
+- [x] `pyproject.toml` sets `--cov-fail-under=85` via `addopts` — enforced on every `pytest` run
+- [x] All source files at 100% coverage; `verdict.py` and `formatter.py` confirmed 100%
+- [x] Coverage report shows per-file breakdown (`--cov-report=term-missing`)
 
 **Definition of Done**:
 
-- [ ] Coverage gates enforced; thresholds documented in README
+- [x] Coverage gates enforced; 84 tests passing at 100% total coverage
 
 **Git Workflow**:
 
-- Branch: `feat/t020-coverage-gates`
+- Branch: `feat/component-status-display`
 
 ---
 
