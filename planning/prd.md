@@ -1,16 +1,17 @@
-# Product Requirements Document — GitHub Status Slack Bot
+# Product Requirements Document — Dev Tools Status Slack Bot
 
 ## 1. Executive Summary
 
 - **Project Name & Version**: `github_status_bot` — v0.1 (MVP draft)
-- **Date & Status**: 2026-04-27 — In development — Phase 1 (E001–E003 complete)
-- **Vision Statement**: Give engineers an instant, authoritative answer to "is GitHub actually down?" without leaving Slack — and proactively alert the team the moment GitHub reports an outage.
+- **Date & Status**: 2026-04-28 — In development — Phase 1 (E001–E004 complete); Phase 3 requirements added
+- **Vision Statement**: Give engineers an instant, authoritative answer to "is [service] actually down?" without leaving Slack — starting with GitHub, extending to any development tool the team relies on — and proactively alert the team the moment any configured service reports an outage.
 - **Success Metrics**:
-  1. **Zero false alarms** — bot reports "down" only when GitHub's own status API confirms it.
+  1. **Zero false alarms** — bot reports "down" only when the service's own status API confirms it.
   2. **Phase 1: Zero unsolicited messages** — in Phase 1 the bot speaks only in direct response to an `@github_status_bot` mention, exactly once per mention.
   3. **Source-truthful answers** — every response reflects live data fetched at request time; no fabricated answers.
   4. **Sub-3-second median response time** from `@`-mention to Slack message posted (Phase 1).
   5. **Phase 2: Proactive alerting** — team is notified in a designated channel within one polling interval of GitHub reporting an outage.
+  6. **Phase 3: Multi-service coverage** — engineers can check any configured development tool (initially GitHub and Claude) with a single mention; adding a new service requires no code changes.
 
 ## 2. Problem Statement
 
@@ -84,16 +85,54 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - `ALERT_CHANNEL_ID` is set at deploy time. No runtime configuration command required in Phase 2.
 - *Acceptance*: Alerts appear in the correct channel after deploy with `ALERT_CHANNEL_ID` set.
 
+### Phase 3 — Multi-Service Status Checks
+
+**M1 — Service registry**
+- The bot maintains a registry of status services to check. Each entry has a short name (e.g. `github`, `claude`), a `status.json` URL, and an `incidents/unresolved.json` URL (Statuspage.io shape, which both GitHub and Claude use).
+- The default registered services are `github` (`https://www.githubstatus.com/api/v2`) and `claude` (`https://status.claude.com/api/v2`).
+- Additional services can be added via environment variable without code changes: `STATUS_SERVICES=github,claude,linear` plus per-service base-URL vars (e.g. `STATUS_URL_LINEAR=https://linea...`).
+- *Acceptance*: Adding a new service name and its base URL to the environment causes the bot to check that service on next mention.
+
+**M2 — Named-service query**
+- When the mention text includes a recognised service name (e.g. `@github_status_bot claude`), the bot checks and replies with only that service's status, using the same verdict + duration format as Phase 1.
+- When the mention includes an unrecognised name, the bot replies with the list of available service names.
+- *Acceptance*: `@github_status_bot claude` returns Claude's status only. `@github_status_bot foobar` returns a "I don't know that service — available: github, claude" reply.
+
+**M3 — All-services query**
+- When the mention contains no service name (or the word `all`), the bot checks all configured services concurrently and replies with a combined summary — one line per service.
+- Concurrency model mirrors Phase 1: both endpoints for each service are fetched concurrently, subject to the same 2 s timeout and single-retry policy.
+- *Acceptance*: With GitHub and Claude configured, a bare `@github_status_bot` mention returns a reply with one status line per service.
+
+**M4 — Backward compatibility**
+- A bare `@github_status_bot` mention continues to return GitHub's status as the first (or only) line of the reply. If GitHub is the only configured service, the reply is functionally identical to Phase 1.
+- *Acceptance*: Existing Phase 1 users who don't change their mention text see no regression.
+
+**M5 — Phase 2 poller extended to all services**
+- The Phase 2 background poller checks every configured service on each poll interval. Per-service state is stored independently in the JSON state file (keyed by service name).
+- A transition on any service triggers an appropriately labelled alert in `ALERT_CHANNEL_ID`. Services that have not transitioned produce no alert.
+- *Acceptance*: With GitHub and Claude configured — if only GitHub transitions to "down," exactly one alert is posted for GitHub; Claude's state is unchanged and no Claude alert fires.
+
+**M6 — Multi-service reply format**
+- All-services reply: one line per service. Each line states the service name, verdict, and attribution. Example:
+  ```
+  *GitHub*: up — all systems operational (source: GitHub's official status page)
+  *Claude*: down — indicator: major, ~12m (source: Claude's official status page)
+  ```
+- Single-service reply: same as Phase 1 format with the service name substituted for "GitHub."
+- Per-service error: one "couldn't check [service] right now" line per unreachable endpoint; other services in the reply are unaffected.
+- *Acceptance*: Every line in a multi-service reply independently identifies its source and verdict.
+
 ## 4. Technical Architecture
 
 ### Technology Stack
 - **Language**: Python 3.12.
 - **Slack framework**: `slack-bolt` (Python) in socket mode — the bot connects outbound to Slack's WebSocket API; no inbound HTTP server or public URL required.
-- **HTTP**: `httpx` (async, timeouts, retries) for GitHub Status API calls.
+- **HTTP**: `httpx` (async, timeouts, retries) for all status API calls.
 - **Hosting (Phase 1)**: Long-running process on a team-managed machine. Started via `uv run python -m github_status_bot.slack_handler`. No cloud infrastructure required.
 - **Hosting (Phase 2 addition)**: Background `asyncio` task running in the same process as Phase 1. No additional infrastructure.
+- **Hosting (Phase 3)**: No new infrastructure. Service registry and fetcher abstraction live in the same process; Phase 3 extends the existing fetcher module.
 - **Secrets**: `.env` file on the host machine (never committed to git). Variables: `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET`.
-- **Phase 2 persistence**: JSON file on disk for polling state — `{indicator: <str>, last_alerted_at: <unix>}`.
+- **Phase 2 persistence**: JSON file on disk for polling state — `{<service_name>: {indicator: <str>, last_alerted_at: <unix>}, ...}` (keyed by service name from Phase 3 onward).
 - **Observability**: Python `logging` to stdout; redirect to a log file as needed via shell redirection.
 
 ### Integration Strategy
@@ -113,11 +152,15 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 
 ### API Design
 - **Inbound (Phase 1)**: `app_mention` events received over Slack's WebSocket (socket mode). No inbound HTTP endpoint required.
-- **Outbound (both phases)**:
+- **Outbound (Phases 1–2)**:
   - `GET https://www.githubstatus.com/api/v2/status.json`
   - `GET https://www.githubstatus.com/api/v2/incidents/unresolved.json`
   - `POST https://slack.com/api/chat.postMessage`
-- **Persistence (Phase 2)**: JSON file on disk — `{indicator: <str>, last_alerted_at: <unix>}`.
+- **Outbound (Phase 3 additions)**:
+  - `GET https://status.claude.com/api/v2/status.json`
+  - `GET https://status.claude.com/api/v2/incidents/unresolved.json`
+  - Any additional service endpoints configured via environment variables
+- **Persistence (Phase 2+)**: JSON file on disk — `{<service_name>: {indicator: <str>, last_alerted_at: <unix>}, ...}`.
 
 ### Security & Performance Requirements
 - **Authentication**: socket mode uses an app-level token (`xapp-...`) to authenticate the WebSocket connection. Slack initiates no inbound HTTP, so there is no per-request signature to verify.
@@ -173,6 +216,18 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - **D3.** As an admin, I don't get spammed with repeated alerts during a prolonged outage.
   - *AC*: P4 satisfied; exactly 1 alert per state transition.
 
+### Epic E — Check any dev tool on demand (Phase 3)
+- **E1.** As an engineer, I can type `@github_status_bot claude` and receive Claude's status without knowing which URL to visit.
+  - *AC*: M2 satisfied; reply attributes to Claude's official status page.
+- **E2.** As an engineer, typing `@github_status_bot` (no service name) shows me the status of all configured tools in one reply.
+  - *AC*: M3 satisfied; one line per service, all fetched concurrently.
+- **E3.** As an engineer, my existing `@github_status_bot` workflow for GitHub is unchanged.
+  - *AC*: M4 satisfied; bare mention still includes GitHub's status.
+- **E4.** As a team member, I'm alerted in the designated channel when Claude goes down, just as I am for GitHub.
+  - *AC*: M5 satisfied; per-service transition alerts fire independently.
+- **E5.** As an admin, I can add a new service (e.g., Linear) by setting two environment variables, with no code changes.
+  - *AC*: M1 satisfied; bot checks the new service on next restart.
+
 ### Edge Cases & Error Scenarios
 - Slack retries the same event → idempotency on `event_id`.
 - GitHub Status API returns 500 → "couldn't check right now," never assumed-up.
@@ -181,6 +236,9 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - Cold start exceeds Slack's 3s ack window → ack first, post reply after.
 - Phase 2: DynamoDB write fails during state transition → log error, do not post alert (avoids phantom alerts on next poll).
 - Phase 2: Poller and mention handler observe different states momentarily (race) → acceptable; each uses live data.
+- Phase 3: One service's API is unreachable while another's succeeds → reply includes the successful result and a "couldn't check [service]" line for the failed one; never suppress partial results.
+- Phase 3: A configured service's response shape diverges from the expected Statuspage.io schema → treat as a fetch error for that service; log the parse failure; other services unaffected.
+- Phase 3: User types a service name with different casing (e.g. `Claude`) → match case-insensitively.
 
 ## 7. Implementation Roadmap
 
@@ -205,6 +263,13 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - Day 4: Validate end-to-end in workspace (temporarily set `POLL_INTERVAL_MINUTES=1` to test).
 - Day 5: Tune interval default, monitor for noise.
 
+### Phase 3 — Multi-Service Status Checks (target: ~1 week, after Phase 2 stable for ≥2 weeks)
+- Day 1: Abstract the GitHub-specific fetcher into a generic `StatusClient(base_url)`. Add service registry (env-var driven). Unit tests for registry loading and generic fetcher.
+- Day 2: Update mention handler to parse service name from mention text; route to named-service or all-services path. Unit tests for routing logic.
+- Day 3: Add Claude as a registered service; validate response shape against `https://status.claude.com/api/v2`. Update fixtures.
+- Day 4: Extend Phase 2 poller to iterate over all registered services; extend state file schema to key by service name. Migrate existing GitHub state entry.
+- Day 5: Integration tests for multi-service all-services reply, single-service named query, partial-failure reply, and poller multi-service transitions. Validate end-to-end in workspace.
+
 ### Risk Mitigation per Phase
 - **Phase 1**: GitHub Status API outage → bot reports "couldn't check"; never fails silently.
 - **Phase 2**: DynamoDB write failure on state change → do not post alert; log and retry next poll. Prevents phantom duplicate alerts on recovery.
@@ -219,6 +284,12 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 ### Phase 2 Ready Criteria
 - All P1–P5 and Epic D acceptance criteria pass.
 - End-to-end test: deploy with low poll interval, confirm alert fires within one interval of a real or simulated status change, confirm recovery message fires on resolution, confirm no duplicate alerts during sustained "down."
+
+### Phase 3 Ready Criteria
+- All M1–M6 acceptance criteria pass in production Slack workspace.
+- All Epic E acceptance criteria pass.
+- Manual test: `@github_status_bot`, `@github_status_bot github`, `@github_status_bot claude`, `@github_status_bot all`, and `@github_status_bot foobar` each return the correct response.
+- Adding a third service via environment variables (no code change) and restarting the bot causes it to appear in all-services replies.
 
 ### Technical Performance Standards
 - Phase 1 p50 reply time ≤ 3s, p95 ≤ 8s.
@@ -279,6 +350,15 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - **R6 — Bot stops being used** because users don't remember the `@` handle.
   - *Likelihood*: medium. *Impact*: low (Phase 2 proactive alerting reduces reliance on recall anyway).
   - *Mitigation*: Pin a one-liner in `#engineering`. Phase 2 proactive alerts keep the bot visible.
+- **R7 — Claude status API response shape diverges from Statuspage.io standard**.
+  - *Likelihood*: low (Anthropic uses Statuspage.io, which has a stable schema). *Impact*: medium (Claude status silently treated as an error).
+  - *Mitigation*: Validate response shape in the generic fetcher and log a descriptive parse error; surface it in the bot reply so the failure is visible rather than silent.
+- **R8 — Combined all-services reply becomes verbose** as more services are added.
+  - *Likelihood*: medium if team adds many services. *Impact*: low (annoying but not incorrect).
+  - *Mitigation*: Keep default service list short (GitHub + Claude). Consider a compact one-liner-per-service format; if the list grows, a "summary" mode (e.g. show only degraded services) can be added as a follow-on.
+- **R9 — State file schema migration** when Phase 3 re-keys the JSON by service name, breaking any existing Phase 2 state file.
+  - *Likelihood*: high (schema change is intentional). *Impact*: low (worst case: one spurious alert on first Phase-3 poll due to missing prior state).
+  - *Mitigation*: On first read after upgrade, if the file is in the old single-service shape, treat prior state as unknown for all services (triggers at most one alert per service if they happen to be down at that moment).
 
 ---
 
