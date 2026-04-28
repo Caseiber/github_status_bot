@@ -16,6 +16,8 @@ _UP_RESPONSE = GitHubStatusResponse(
     indicator="none", incidents=[], components=[], fetch_error=False
 )
 
+_CHANNEL = "C1"  # single channel used throughout — bot operates in one channel
+
 
 @pytest.fixture
 def say() -> MagicMock:
@@ -34,10 +36,9 @@ def mock_fetch() -> Iterator[AsyncMock]:
 
 def _event(
     event_id: str = "ev1",
-    channel: str = "C1",
     thread_ts: str | None = None,
 ) -> dict[str, str]:
-    e: dict[str, str] = {"event_id": event_id, "channel": channel}
+    e: dict[str, str] = {"event_id": event_id, "channel": _CHANNEL}
     if thread_ts is not None:
         e["thread_ts"] = thread_ts
     return e
@@ -57,8 +58,11 @@ def test_duplicate_event_id_posts_only_once(
 
 
 def test_distinct_event_ids_each_post(mock_fetch: AsyncMock, say: MagicMock) -> None:
-    handle_mention(_event("ev1", channel="C1"), say)
-    handle_mention(_event("ev2", channel="C2"), say)  # different channel avoids rate-limit
+    with patch("time.monotonic") as mock_time:
+        mock_time.return_value = 0.0
+        handle_mention(_event("ev1"), say)
+        mock_time.return_value = handler._COOLDOWN_SECONDS + 1.0
+        handle_mention(_event("ev2"), say)
     assert say.call_count == 2
 
 
@@ -67,31 +71,24 @@ def test_seen_event_id_expires_after_ttl(
 ) -> None:
     with patch("time.monotonic") as mock_time:
         mock_time.return_value = 0.0
-        handle_mention(_event("ev1", channel="C1"), say)
+        handle_mention(_event("ev1"), say)
+        # Advance past both the seen-TTL (60s) and the cooldown (5s)
         mock_time.return_value = handler._SEEN_TTL + 1.0
-        handle_mention(_event("ev1", channel="C2"), say)  # different channel, post-TTL
+        handle_mention(_event("ev1"), say)
     assert say.call_count == 2
 
 
 # ---------------------------------------------------------------------------
-# T016 — Per-channel rate-limit guard
+# T016 — Rate-limit guard
 # ---------------------------------------------------------------------------
 
 
-def test_second_mention_same_channel_within_cooldown_is_ignored(
+def test_second_mention_within_cooldown_is_ignored(
     mock_fetch: AsyncMock, say: MagicMock
 ) -> None:
-    handle_mention(_event("ev1", channel="C1"), say)
-    handle_mention(_event("ev2", channel="C1"), say)
+    handle_mention(_event("ev1"), say)
+    handle_mention(_event("ev2"), say)
     assert say.call_count == 1
-
-
-def test_mentions_in_different_channels_both_answered(
-    mock_fetch: AsyncMock, say: MagicMock
-) -> None:
-    handle_mention(_event("ev1", channel="C1"), say)
-    handle_mention(_event("ev2", channel="C2"), say)
-    assert say.call_count == 2
 
 
 def test_mention_after_cooldown_is_answered(
@@ -99,9 +96,9 @@ def test_mention_after_cooldown_is_answered(
 ) -> None:
     with patch("time.monotonic") as mock_time:
         mock_time.return_value = 0.0
-        handle_mention(_event("ev1", channel="C1"), say)
+        handle_mention(_event("ev1"), say)
         mock_time.return_value = handler._COOLDOWN_SECONDS + 1.0
-        handle_mention(_event("ev2", channel="C1"), say)
+        handle_mention(_event("ev2"), say)
     assert say.call_count == 2
 
 
@@ -132,13 +129,16 @@ def test_channel_root_mention_has_no_thread_ts(
 def test_cache_at_capacity_evicts_oldest_and_accepts_new(
     mock_fetch: AsyncMock, say: MagicMock
 ) -> None:
-    # Pre-fill to one below capacity with recent timestamps (stale ts=0 would be purged by TTL)
+    # Pre-fill to one below capacity with recent timestamps
     now = time.monotonic()
     for i in range(handler._SEEN_CAPACITY - 1):
         handler._seen_events[f"old{i}"] = now
 
-    handle_mention(_event("ev_fill", channel="C_fill"), say)  # fills to capacity
-    handle_mention(_event("ev_over", channel="C_over"), say)  # triggers eviction
+    with patch("time.monotonic") as mock_time:
+        mock_time.return_value = now + handler._COOLDOWN_SECONDS + 1.0
+        handle_mention(_event("ev_fill"), say)  # fills to capacity
+        mock_time.return_value = now + 2 * (handler._COOLDOWN_SECONDS + 1.0)
+        handle_mention(_event("ev_over"), say)  # triggers eviction
 
     assert say.call_count == 2
     assert len(handler._seen_events) == handler._SEEN_CAPACITY
