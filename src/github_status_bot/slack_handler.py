@@ -94,9 +94,11 @@ def handle_mention(event: dict[str, Any], say: Any) -> None:
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler
 
+    load_dotenv()
     logging.basicConfig(level=logging.INFO)
 
     _app = App(
