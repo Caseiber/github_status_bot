@@ -138,6 +138,10 @@ def test_parse_components_missing_key() -> None:
     assert _parse_components({}) == []
 
 
+def test_parse_components_non_list_value() -> None:
+    assert _parse_components({"components": "bad"}) == []
+
+
 def test_parse_components_skips_nameless_items() -> None:
     data = {"components": [{"id": "x", "name": "", "status": "operational"}]}
     assert _parse_components(data) == []

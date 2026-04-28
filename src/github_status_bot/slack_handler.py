@@ -94,7 +94,7 @@ def handle_mention(event: dict[str, Any], say: Any) -> None:
     _channel_cooldown[channel] = time.monotonic()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     from dotenv import load_dotenv
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler

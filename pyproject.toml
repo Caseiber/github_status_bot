@@ -45,6 +45,7 @@ explicit_package_bases = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "--cov=src --cov-report=term-missing --cov-fail-under=85"
 markers = ["integration: live network/AWS calls (deselect with -m 'not integration')"]
 
 [tool.coverage.run]

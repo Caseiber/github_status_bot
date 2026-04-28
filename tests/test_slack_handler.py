@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterator
+import time
+from collections.abc import Iterator
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,15 +15,6 @@ from github_status_bot.slack_handler import handle_mention
 _UP_RESPONSE = GitHubStatusResponse(
     indicator="none", incidents=[], components=[], fetch_error=False
 )
-
-
-@pytest.fixture(autouse=True)
-def reset_handler_state() -> Generator[None, None, None]:
-    handler._seen_events.clear()
-    handler._channel_cooldown.clear()
-    yield
-    handler._seen_events.clear()
-    handler._channel_cooldown.clear()
 
 
 @pytest.fixture
@@ -130,3 +122,43 @@ def test_channel_root_mention_has_no_thread_ts(
 ) -> None:
     handle_mention(_event("ev1"), say)
     assert "thread_ts" not in say.call_args.kwargs
+
+
+# ---------------------------------------------------------------------------
+# Cache capacity eviction (line coverage for _is_duplicate eviction path)
+# ---------------------------------------------------------------------------
+
+
+def test_cache_at_capacity_evicts_oldest_and_accepts_new(
+    mock_fetch: AsyncMock, say: MagicMock
+) -> None:
+    # Pre-fill to one below capacity with recent timestamps (stale ts=0 would be purged by TTL)
+    now = time.monotonic()
+    for i in range(handler._SEEN_CAPACITY - 1):
+        handler._seen_events[f"old{i}"] = now
+
+    handle_mention(_event("ev_fill", channel="C_fill"), say)  # fills to capacity
+    handle_mention(_event("ev_over", channel="C_over"), say)  # triggers eviction
+
+    assert say.call_count == 2
+    assert len(handler._seen_events) == handler._SEEN_CAPACITY
+
+
+# ---------------------------------------------------------------------------
+# Unexpected exception fallback
+# ---------------------------------------------------------------------------
+
+
+def test_unexpected_exception_in_fetch_returns_error_reply(say: MagicMock) -> None:
+    with patch(
+        "github_status_bot.slack_handler.fetch_github_status",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("unexpected boom"),
+    ):
+        handle_mention(_event("ev_err"), say)
+
+    say.assert_called_once()
+    text = say.call_args.kwargs["text"]
+    assert "couldn't check" in text.lower()
+    assert "*up*" not in text
+    assert "*down*" not in text
