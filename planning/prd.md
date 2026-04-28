@@ -3,7 +3,7 @@
 ## 1. Executive Summary
 
 - **Project Name & Version**: `github_status_bot` — v0.1 (MVP draft)
-- **Date & Status**: 2026-04-28 — In development — Phase 1 (E001–E004 complete); Phase 3 requirements added
+- **Date & Status**: 2026-04-28 — In development — Phase 1 (E001–E005 complete, component-status display implemented); Phase 3 requirements added
 - **Vision Statement**: Give engineers an instant, authoritative answer to "is [service] actually down?" without leaving Slack — starting with GitHub, extending to any development tool the team relies on — and proactively alert the team the moment any configured service reports an outage.
 - **Success Metrics**:
   1. **Zero false alarms** — bot reports "down" only when the service's own status API confirms it.
@@ -40,16 +40,28 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - *Acceptance*: Posting `@github_status_bot` in any channel the bot is a member of yields exactly one reply within 3 seconds (p50) / 8 seconds (p95).
 
 **F2 — GitHub Status check**
-- Bot fetches `https://www.githubstatus.com/api/v2/status.json` and `https://www.githubstatus.com/api/v2/incidents/unresolved.json` on every mention.
+- Bot fetches `https://www.githubstatus.com/api/v2/status.json` and `https://www.githubstatus.com/api/v2/incidents/unresolved.json` concurrently on every mention.
+- Bot also fetches `https://www.githubstatus.com/api/v2/components.json`; failure is non-fatal and results in no component detail in the reply.
 - "Down" is defined as `status.indicator` ∈ {`minor`, `major`, `critical`} OR any incident in the unresolved list with `resolved_at: null`.
 - Duration uses the incident's `started_at` field.
-- *Acceptance*: When indicator is `none` and incidents array is empty, bot reports "up." When indicator is `major`, bot reports "down" with duration derived from `started_at`.
+- Affected components = any component with status in {`degraded_performance`, `partial_outage`, `major_outage`}.
+- *Acceptance*: When indicator is `none` and incidents array is empty, bot reports "up." When indicator is `major`, bot reports "down" with duration derived from `started_at` and lists any non-operational components.
 
 **F3 — Verdict and source attribution**
-- The reply explicitly states the verdict and cites GitHub's status API, e.g.:
-  - "GitHub appears to be **down**. Source: GitHub's official status page (indicator: major, ~2h 12m)."
-  - "GitHub appears to be **up**. Source: GitHub's official status page (all systems operational)."
-- *Acceptance*: Every reply contains an explicit source attribution. Replies never assert "down" without naming the triggering indicator or incident.
+- The reply uses a structured multi-line format. Source is a Slack mrkdwn hyperlink to `https://www.githubstatus.com`.
+- Down reply includes: opening line, blank line, optional `Affected Area` (non-operational components), `Severity` label (`Degraded` / `Major Outage` / `Critical Outage`), optional `Time Down`, blank line, `Source` hyperlink.
+- Up reply: opening line, blank line, `Source` hyperlink.
+- Example down reply:
+  ```
+  GitHub is *down* because AI DevOps is a blight on our land.
+
+  Affected Area: Git Operations
+  Severity: Degraded
+  Time Down: ~2h 12m
+
+  Source: <https://www.githubstatus.com|GitHub's status page>
+  ```
+- *Acceptance*: Every reply contains an explicit source hyperlink. Replies never assert "down" without a Severity line. `Affected Area` line present iff at least one non-operational component exists.
 
 **F4 — Outage duration**
 - When verdict is "down," bot reports human-friendly duration derived from the earliest unresolved incident's `started_at`: "~12 minutes," "~1h 40m," "less than a minute."
@@ -155,6 +167,7 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - **Outbound (Phases 1–2)**:
   - `GET https://www.githubstatus.com/api/v2/status.json`
   - `GET https://www.githubstatus.com/api/v2/incidents/unresolved.json`
+  - `GET https://www.githubstatus.com/api/v2/components.json` (optional — failure is non-fatal)
   - `POST https://slack.com/api/chat.postMessage`
 - **Outbound (Phase 3 additions)**:
   - `GET https://status.claude.com/api/v2/status.json`

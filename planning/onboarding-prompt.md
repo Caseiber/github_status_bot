@@ -27,8 +27,7 @@ proactively post anything in Phase 1.
 **Vision**: Give engineers an instant, authoritative answer to "is GitHub actually down?" without leaving Slack — and (
 in Phase 2) alert the team proactively when GitHub reports an outage.
 
-**Current status**: Phase 1 in progress. E001–E004 complete (T001, T002, T004–T012). Next: T013 (API unreachable error
-handling), T014 (missing started_at end-to-end), T015 (idempotency).
+**Current status**: Phase 1 in progress. E001–E005 complete (T001, T002, T004–T017). Component-level status display added (components endpoint, `affected_components` in verdict, structured formatter output). Next: T018 (Slack event payload fixtures), T019 (integration tests), T020 (coverage gates), T021 (run persistently), T027 (README).
 
 ---
 
@@ -39,8 +38,9 @@ handling), T014 (missing started_at end-to-end), T015 (idempotency).
 Bot is silent until `@`-mentioned. On mention:
 
 1. Fetches `https://www.githubstatus.com/api/v2/status.json`
-2. Fetches `https://www.githubstatus.com/api/v2/incidents/unresolved.json`
-3. Replies once in the same channel/thread with verdict + source + duration
+2. Fetches `https://www.githubstatus.com/api/v2/incidents/unresolved.json` (concurrent with step 1)
+3. Fetches `https://www.githubstatus.com/api/v2/components.json` (optional — failure returns `components=[]`)
+4. Replies once in the same channel/thread with verdict + affected components + severity + duration + source
 
 **Requirements**: F1–F5 in `planning/prd.md`. No database. No polling. No scheduled work.
 
@@ -133,6 +133,24 @@ Verified during PRD research — these are the actual response shapes:
 "Down" also triggered by any incident with `resolved_at: null`. Duration comes from `started_at` (not `created_at`). If
 `started_at` is missing, report down without duration — never fabricate.
 
+**`components.json`**
+
+```json
+{
+  "components": [
+    {
+      "id": "...",
+      "name": "Git Operations",
+      "status": "operational | degraded_performance | partial_outage | major_outage"
+    }
+  ]
+}
+```
+
+Fetched separately after `status.json`/`unresolved.json`. Failure is non-fatal — bot replies with `components=[]`.
+Non-operational statuses (`degraded_performance`, `partial_outage`, `major_outage`) are surfaced as `affected_components`
+in the verdict and rendered as the `Affected Area` line in the reply.
+
 ---
 
 ## Verdict Logic
@@ -158,13 +176,32 @@ The verdict module must have **100% unit test coverage**. Test matrix:
 ## Reply Format
 
 **When up:**
-> GitHub appears to be **up**... for NOW. Source: GitHub's official status page (all systems operational).
+```
+GitHub appears to be *up*... for NOW.
 
-**When down:**
-> GitHub is **down** because AI DevOps is a blight on our land. Source: GitHub's official status page (indicator: major, ~2h 12m).
+Source: <https://www.githubstatus.com|GitHub's status page>
+```
+
+**When down (with affected components and duration):**
+```
+GitHub is *down* because AI DevOps is a blight on our land.
+
+Affected Area: Git Operations
+Severity: Degraded
+Time Down: ~2h 12m
+
+Source: <https://www.githubstatus.com|GitHub's status page>
+```
+
+`Affected Area` is omitted when all components are operational or the components endpoint failed.
+`Time Down` is omitted when no `started_at` is available.
+Severity labels: `minor` → `Degraded`, `major` → `Major Outage`, `critical` → `Critical Outage`.
+Source is a Slack mrkdwn hyperlink.
 
 **When API unreachable:**
-> Couldn't check GitHub's status right now — the status API didn't respond because AI DevOps is a blight on our land. Try again in a moment.
+```
+Couldn't check GitHub's status right now — the status API didn't respond. Try again in a moment.
+```
 
 ---
 
@@ -172,8 +209,8 @@ The verdict module must have **100% unit test coverage**. Test matrix:
 
 ### Git Rules
 
-- **Base branch is `cs-initial`** — never commit directly to `cs-initial` or `main`
-- Every feature or task gets its own branch off `cs-initial`: `feat/tXXX-<short-description>`
+- **Base branch is `cs-bot`** — never commit directly to `cs-bot` or `main`
+- Every feature or task gets its own branch off `cs-bot`: `feat/tXXX-<short-description>`
 - Bug fixes: `fix/tXXX-<short-description>`
 - Merge via PR even when working solo — it keeps history clean
 - Commit messages: imperative mood, present tense ("add verdict module", not "added" or "adding")
@@ -217,23 +254,25 @@ github_status_bot/
 ├── src/
 │   └── github_status_bot/
 │       ├── __init__.py           ✅ done
-│       ├── github_status.py      ✅ done — fetches + parses GitHub Status API
-│       ├── verdict.py            ✅ done — pure verdict logic (100% coverage)
-│       ├── formatter.py          ✅ done — format_reply() pure function (100% coverage)
-│       ├── slack_handler.py      ✅ done — socket-mode app_mention handler
+│       ├── github_status.py      ✅ done — fetches status, incidents, components; Component dataclass
+│       ├── verdict.py            ✅ done — pure verdict logic incl. affected_components (100% coverage)
+│       ├── formatter.py          ✅ done — structured multi-line reply w/ Slack hyperlink (100% coverage)
+│       ├── slack_handler.py      ✅ done — socket-mode handler, idempotency, rate-limit, thread-aware
 │       └── poller.py             ← Phase 2 asyncio background task (not yet written)
 ├── tests/
 │   ├── fixtures/
-│   │   ├── status_none.json      ✅ done
-│   │   ├── status_minor.json     ✅ done
-│   │   ├── status_major.json     ✅ done
-│   │   ├── unresolved_empty.json ✅ done
-│   │   ├── unresolved_active.json           ✅ done
-│   │   └── unresolved_missing_started_at.json ✅ done
-│   ├── test_github_status.py     ✅ done (19 tests, 100% coverage)
-│   ├── test_verdict.py           ✅ done (10 tests, 100% coverage)
-│   ├── test_formatter.py         ✅ done (14 tests, 100% coverage)
-│   ├── test_slack_handler.py     ← to be written with T015–T017
+│   │   ├── status_none.json                   ✅ done
+│   │   ├── status_minor.json                  ✅ done
+│   │   ├── status_major.json                  ✅ done
+│   │   ├── unresolved_empty.json              ✅ done
+│   │   ├── unresolved_active.json             ✅ done
+│   │   ├── unresolved_missing_started_at.json ✅ done
+│   │   ├── components_all_operational.json    ✅ done
+│   │   └── components_partial_outage.json     ✅ done
+│   ├── test_github_status.py     ✅ done (27 tests, 100% coverage)
+│   ├── test_verdict.py           ✅ done (18 tests, 100% coverage)
+│   ├── test_formatter.py         ✅ done (17 tests, 100% coverage)
+│   ├── test_slack_handler.py     ✅ done (7 tests — T015/T016/T017)
 │   └── test_poller.py            ← Phase 2 (T033)
 ├── slack_app_manifest.yaml       ✅ done
 ├── .env.example                  ✅ done

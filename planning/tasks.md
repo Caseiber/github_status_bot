@@ -39,8 +39,9 @@
 9. ~~**T010**~~ — ✅ Implement `slack_handler.py` mention handler
 10. ~~**T011**~~ — ✅ Implement reply formatting
 11. ~~**T012**~~ — ✅ Socket-mode runner and `.env.example`
-12. **T013** — Handle GitHub Status API unreachable
-13. **T014** — Handle missing `started_at` on incidents
+12. ~~**T013**~~ — ✅ Handle GitHub Status API unreachable
+13. ~~**T014**~~ — ✅ Handle missing `started_at` on incidents
+14. **T018** — Record Slack event payload fixtures
 
 ---
 
@@ -134,11 +135,12 @@
 
 **Acceptance Criteria**:
 
-- [x] `fetch_github_status()` async function makes concurrent requests to both endpoints
+- [x] `fetch_github_status()` async function makes concurrent requests to `status.json` + `unresolved.json`; fetches `components.json` separately (failure returns `components=[]`)
 - [x] Per-request timeout: 2 seconds
-- [x] One retry on 5xx or timeout; second failure → `fetch_error: True`
-- [x] Returns typed dataclass: `{indicator: str, incidents: list[Incident], fetch_error: bool}`
+- [x] One retry on 5xx or timeout; second failure → `fetch_error: True` (critical endpoints) or `components=[]` (components endpoint)
+- [x] Returns typed dataclass: `{indicator: str, incidents: list[Incident], components: list[Component], fetch_error: bool}`
 - [x] `Incident` includes `started_at: datetime | None` and `resolved_at: datetime | None`
+- [x] `Component` includes `name: str` and `status: str`
 - [x] `mypy --strict` passes
 
 **Definition of Done**:
@@ -157,11 +159,13 @@
 **Acceptance Criteria**:
 
 - [x] All HTTP calls mocked with `pytest-httpx`
-- [x] Test: both endpoints 200 — parsed correctly
+- [x] Test: all three endpoints 200 — parsed correctly; `components` list populated
 - [x] Test: `status.json` 500 both attempts → `fetch_error: True`
 - [x] Test: `unresolved.json` timeout → `fetch_error: True`
 - [x] Test: `started_at` missing → `Incident.started_at` is `None`
 - [x] Test: retry — first 500, second 200 — succeeds
+- [x] Test: `components.json` 500 both attempts → `components=[]`, no fetch_error
+- [x] Test: `_parse_components` unit tests (all operational, partial outage, missing key, nameless item, non-dict item)
 - [x] Coverage on `github_status.py` = 100%
 
 **Definition of Done**:
@@ -187,7 +191,8 @@
 **Acceptance Criteria**:
 
 - [x] `compute_verdict(status_response) -> VerdictResult` is a pure function
-- [x] `VerdictResult`: `{is_down: bool, indicator: str, duration_seconds: int | None, has_fetch_error: bool}`
+- [x] `VerdictResult`: `{is_down: bool, indicator: str, duration_seconds: int | None, has_fetch_error: bool, affected_components: tuple[str, ...]}`
+- [x] `affected_components` = names of components with status in `{degraded_performance, partial_outage, major_outage}`; empty tuple when all operational or components unavailable
 - [x] `is_down = True` when `indicator` ∈ `{minor, major, critical}`
 - [x] `is_down = True` when any incident has `resolved_at = None`
 - [x] `is_down = False` when `indicator = none` AND all incidents resolved or list empty
@@ -216,8 +221,10 @@
 - [x] Test: active incident with valid `started_at` → `is_down=True`, `duration` ≥ 0
 - [x] Test: active incident with missing `started_at` → `is_down=True`, `duration=None`
 - [x] Test: incident with `resolved_at` set → `is_down=False`
-- [x] Test: `has_fetch_error=True` propagated
+- [x] Test: `has_fetch_error=True` propagated; `affected_components=()`
 - [x] Test: multiple incidents — duration from earliest `started_at`
+- [x] Test: all operational components → `affected_components=()`
+- [x] Test: degraded/partial/major_outage components → names included in `affected_components`
 - [x] Coverage on `verdict.py` = 100%
 
 **Definition of Done**:
@@ -294,9 +301,10 @@
 **Acceptance Criteria**:
 
 - [x] `format_reply(verdict: VerdictResult) -> str` pure function in `formatter.py`
-- [x] Up reply: `"GitHub appears to be *up*. Source: GitHub's official status page (all systems operational)."`
-- [x] Down reply with duration: `"GitHub appears to be *down*. Source: GitHub's official status page (indicator: major, ~2h 12m)."`
-- [x] Down reply without duration: `"GitHub appears to be *down*. Source: GitHub's official status page (indicator: major)."`
+- [x] Up reply: opening line + blank line + `Source: <hyperlink>` (Slack mrkdwn)
+- [x] Down reply: opening line → blank line → optional `Affected Area: <component, ...>` → `Severity: <label>` → optional `Time Down: <duration>` → blank line → `Source: <hyperlink>`
+- [x] Severity labels: `minor` → `Degraded`, `major` → `Major Outage`, `critical` → `Critical Outage`
+- [x] Source is a Slack mrkdwn hyperlink: `<https://www.githubstatus.com|GitHub's status page>`
 - [x] Error reply: `"Couldn't check GitHub's status right now — the status API didn't respond. Try again in a moment."`
 - [x] Duration: `< 60s` → `"less than a minute"`; `< 60m` → `"~Xm"`; `≥ 60m` → `"~Xh Ym"`
 - [x] `mypy --strict` passes
@@ -342,18 +350,18 @@
 
 **Acceptance Criteria**:
 
-- [ ] When `fetch_github_status()` returns `fetch_error=True`, bot posts the error copy
-- [ ] Error reply never says "up" or "down" — only that it couldn't check
-- [ ] No unhandled exceptions propagate out of the handler
+- [x] When `fetch_github_status()` returns `fetch_error=True`, bot posts the error copy
+- [x] Error reply never says "up" or "down" — only that it couldn't check
+- [x] No unhandled exceptions propagate out of the handler
 
 **Testing Requirements**:
 
-- [ ] Unit test: `compute_verdict` with `fetch_error=True` → error verdict
-- [ ] Unit test: `format_reply` with error verdict → correct error string
+- [x] Unit test: `compute_verdict` with `fetch_error=True` → error verdict
+- [x] Unit test: `format_reply` with error verdict → correct error string
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met; unit tests passing
+- [x] All acceptance criteria met; unit tests passing
 
 **Git Workflow**:
 
@@ -370,13 +378,13 @@
 
 **Acceptance Criteria**:
 
-- [ ] Active incident with no `started_at` → `is_down=True`, `duration_seconds=None`
-- [ ] Reply omits duration rather than fabricating or crashing
-- [ ] Full path confirmed: fixture → verdict → formatter → correct reply string
+- [x] Active incident with no `started_at` → `is_down=True`, `duration_seconds=None`
+- [x] Reply omits duration rather than fabricating or crashing
+- [x] Full path confirmed: fixture → verdict → formatter → correct reply string
 
 **Definition of Done**:
 
-- [ ] Integration test verifies end-to-end with `unresolved_missing_started_at.json` fixture
+- [x] Unit tests confirm end-to-end with `unresolved_missing_started_at.json` fixture
 
 **Git Workflow**:
 
@@ -876,7 +884,7 @@
 
 ```bash
 # Start a task
-git checkout cs-initial && git pull
+git checkout cs-bot && git pull
 git checkout -b feat/tXXX-description
 
 # Run checks before committing
