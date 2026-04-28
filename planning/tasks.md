@@ -16,11 +16,11 @@
 | E005: Resilience & Edge Cases | 5 | 5 | 0 | 0 |
 | E006: Integration Tests | 3 | 3 | 0 | 0 |
 | E007: Phase 1 Launch | 1 | 1 | 0 | 0 |
-| E008: Phase 1 Validation | 2 | 0 | 0 | 2 |
+| E008: Phase 1 Validation | 2 | 1 | 0 | 1 |
 | E009: Phase 2 — State Model | 3 | 0 | 0 | 3 |
 | E010: Phase 2 — Poller | 3 | 0 | 0 | 3 |
 | E011: Phase 2 — Validation | 2 | 0 | 0 | 2 |
-| **Total** | **30** | **20** | **0** | **10** |
+| **Total** | **30** | **21** | **0** | **9** |
 
 **Last Updated**: 2026-04-28
 
@@ -45,7 +45,8 @@
 15. ~~**T019**~~ — ✅ Integration tests — full handler flow
 16. ~~**T020**~~ — ✅ Coverage gate verification
 17. ~~**T021**~~ — ✅ Configure `.env` and run bot persistently
-18. **T026** — Phase 1 soak test
+18. ~~**T027**~~ — ✅ README and project documentation
+19. **T026** — Phase 1 soak test
 
 ---
 
@@ -637,16 +638,16 @@
 
 **Acceptance Criteria**:
 
-- [ ] README covers: prerequisites (`uv`, Slack app setup)
-- [ ] README covers: creating `.env` from `.env.example`
-- [ ] README covers: starting the bot in a tmux session (`tmux new-session -d -s github-bot '...'`)
-- [ ] README covers: attaching/detaching from the tmux session and stopping the bot
-- [ ] README covers: rotating Slack tokens (update `.env`, restart process)
-- [ ] `.env.example` describes all variables with one-line explanations
+- [x] README covers: prerequisites (`uv`, Slack app setup)
+- [x] README covers: creating `.env` from `.env.example`
+- [x] README covers: starting the bot in a tmux session (`tmux new-session -d -s github-bot '...'`)
+- [x] README covers: attaching/detaching from the tmux session and stopping the bot
+- [x] README covers: rotating Slack tokens (update `.env`, restart process)
+- [x] `.env.example` describes all variables with one-line explanations
 
 **Definition of Done**:
 
-- [ ] README committed; project is reproducible from docs alone
+- [x] README committed; project is reproducible from docs alone
 
 **Git Workflow**:
 
