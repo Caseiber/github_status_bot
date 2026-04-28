@@ -35,4 +35,7 @@ def format_reply(verdict: VerdictResult) -> str:
     if verdict.duration_seconds is not None:
         detail += f", {_format_duration(verdict.duration_seconds)}"
 
-    return f"GitHub is *down* because AI DevOps is a blight on our land. Source: GitHub's official status page ({detail})."
+    return (
+        f"GitHub is *down* because AI DevOps is a blight on our land. "
+        f"Source: GitHub's official status page ({detail})."
+    )

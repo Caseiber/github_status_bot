@@ -67,7 +67,7 @@ def test_format_reply_fetch_error() -> None:
 def test_format_reply_up() -> None:
     result = format_reply(_verdict(is_down=False, indicator="none"))
     assert result == (
-        "GitHub appears to be *up*. "
+        "GitHub appears to be *up*... for NOW. "
         "Source: GitHub's official status page (all systems operational)."
     )
 
@@ -80,7 +80,7 @@ def test_format_reply_up() -> None:
 def test_format_reply_down_with_duration() -> None:
     result = format_reply(_verdict(is_down=True, indicator="major", duration_seconds=7920))
     assert result == (
-        "GitHub appears to be *down*. "
+        "GitHub is *down* because AI DevOps is a blight on our land. "
         "Source: GitHub's official status page (indicator: major, ~2h 12m)."
     )
 
@@ -99,7 +99,7 @@ def test_format_reply_down_with_short_duration() -> None:
 def test_format_reply_down_no_duration() -> None:
     result = format_reply(_verdict(is_down=True, indicator="major", duration_seconds=None))
     assert result == (
-        "GitHub appears to be *down*. "
+        "GitHub is *down* because AI DevOps is a blight on our land. "
         "Source: GitHub's official status page (indicator: major)."
     )
     assert "None" not in result
