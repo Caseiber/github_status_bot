@@ -124,18 +124,36 @@ def test_format_reply_down_critical_no_duration() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_format_reply_down_with_affected_components() -> None:
+def test_format_reply_down_with_single_affected_component() -> None:
     result = format_reply(
         _verdict(
             is_down=True,
             indicator="minor",
             duration_seconds=3600,
+            affected_components=("Git Operations",),
+        )
+    )
+    assert "Affected Area: Git Operations" in result
+    assert "Affected Areas" not in result
+    assert "Severity: Degraded" in result
+    assert "Time Down: ~1h" in result
+    assert f"Source: {_SOURCE}" in result
+
+
+def test_format_reply_down_with_multiple_affected_components_uses_bullet_list() -> None:
+    result = format_reply(
+        _verdict(
+            is_down=True,
+            indicator="major",
+            duration_seconds=3600,
             affected_components=("Git Operations", "API Requests"),
         )
     )
-    assert "Affected Area: Git Operations, API Requests" in result
-    assert "Severity: Degraded" in result
-    assert "Time Down: ~1h" in result
+    assert "Affected Areas:" in result
+    assert "• Git Operations" in result
+    assert "• API Requests" in result
+    assert "Affected Area:" not in result
+    assert "Severity: Major Outage" in result
     assert f"Source: {_SOURCE}" in result
 
 

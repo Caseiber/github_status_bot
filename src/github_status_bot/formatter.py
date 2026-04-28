@@ -38,8 +38,11 @@ def format_reply(verdict: VerdictResult) -> str:
 
     lines = ["GitHub is *down* because AI DevOps is a blight on our land.", ""]
 
-    if verdict.affected_components:
-        lines.append(f"Affected Area: {', '.join(verdict.affected_components)}")
+    if len(verdict.affected_components) == 1:
+        lines.append(f"Affected Area: {verdict.affected_components[0]}")
+    elif len(verdict.affected_components) > 1:
+        lines.append("Affected Areas:")
+        lines.extend(f"• {name}" for name in verdict.affected_components)
 
     severity = _SEVERITY_LABELS.get(verdict.indicator, verdict.indicator.title())
     lines.append(f"Severity: {severity}")
