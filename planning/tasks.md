@@ -13,14 +13,14 @@
 | E002: GitHub Status Client | 3 | 3 | 0 | 0 |
 | E003: Verdict Engine | 2 | 2 | 0 | 0 |
 | E004: Slack Bot | 4 | 4 | 0 | 0 |
-| E005: Resilience & Edge Cases | 5 | 0 | 0 | 5 |
+| E005: Resilience & Edge Cases | 5 | 5 | 0 | 0 |
 | E006: Integration Tests | 3 | 0 | 0 | 3 |
 | E007: Phase 1 Launch | 1 | 0 | 0 | 1 |
 | E008: Phase 1 Validation | 2 | 0 | 0 | 2 |
 | E009: Phase 2 — State Model | 3 | 0 | 0 | 3 |
 | E010: Phase 2 — Poller | 3 | 0 | 0 | 3 |
 | E011: Phase 2 — Validation | 2 | 0 | 0 | 2 |
-| **Total** | **30** | **11** | **0** | **19** |
+| **Total** | **30** | **16** | **0** | **14** |
 
 **Last Updated**: 2026-04-28
 
@@ -393,18 +393,18 @@
 
 **Acceptance Criteria**:
 
-- [ ] Same `event_id` received twice → only one `chat.postMessage` call
-- [ ] In-memory cache of recently seen `event_id` values (TTL ≥ 60s, capacity ≥ 100)
-- [ ] Different `event_id` with same text → two replies (idempotency is on ID, not content)
+- [x] Same `event_id` received twice → only one `chat.postMessage` call
+- [x] In-memory cache of recently seen `event_id` values (TTL ≥ 60s, capacity ≥ 100)
+- [x] Different `event_id` with same text → two replies (idempotency is on ID, not content)
 
 **Testing Requirements**:
 
-- [ ] Unit test: duplicate `event_id` → one post
-- [ ] Unit test: distinct `event_id` → two posts
+- [x] Unit test: duplicate `event_id` → one post
+- [x] Unit test: distinct `event_id` → two posts
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met; unit tests passing
+- [x] All acceptance criteria met; unit tests passing
 
 **Git Workflow**:
 
@@ -421,18 +421,18 @@
 
 **Acceptance Criteria**:
 
-- [ ] After replying in a channel, bot ignores further mentions in that channel for 5 seconds
-- [ ] Cooldown is per-channel (channel A blocked does not affect channel B)
-- [ ] In-memory dict of `{channel_id: last_reply_ts}`
+- [x] After replying in a channel, bot ignores further mentions in that channel for 5 seconds
+- [x] Cooldown is per-channel (channel A blocked does not affect channel B)
+- [x] In-memory dict of `{channel_id: last_reply_ts}`
 
 **Testing Requirements**:
 
-- [ ] Unit test: two mentions same channel within 5s → one reply
-- [ ] Unit test: mentions in two channels within 5s → two replies
+- [x] Unit test: two mentions same channel within 5s → one reply
+- [x] Unit test: mentions in two channels within 5s → two replies
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met; unit tests passing
+- [x] All acceptance criteria met; unit tests passing
 
 **Git Workflow**:
 
@@ -449,17 +449,17 @@
 
 **Acceptance Criteria**:
 
-- [ ] Mention with `thread_ts` → reply posted with matching `thread_ts`
-- [ ] Mention in channel root → reply in channel root
+- [x] Mention with `thread_ts` → reply posted with matching `thread_ts`
+- [x] Mention in channel root → reply in channel root
 
 **Testing Requirements**:
 
-- [ ] Unit test: event with `thread_ts` → `say()` called with `thread_ts`
-- [ ] Unit test: event without `thread_ts` → `say()` called without `thread_ts`
+- [x] Unit test: event with `thread_ts` → `say()` called with `thread_ts`
+- [x] Unit test: event without `thread_ts` → `say()` called without `thread_ts`
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met; verified manually in workspace
+- [x] All acceptance criteria met; verified manually in workspace
 
 **Git Workflow**:
 
