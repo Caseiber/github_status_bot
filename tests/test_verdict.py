@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from github_status_bot.github_status import Component, GitHubStatusResponse, Incident
 from github_status_bot.verdict import VerdictResult, compute_verdict
 
@@ -188,3 +190,28 @@ def test_multiple_non_operational_components_all_included() -> None:
     ]
     result = compute_verdict(_make_response(indicator="major", components=components))
     assert result.affected_components == ("Git Operations", "API Requests")
+
+
+# ---------------------------------------------------------------------------
+# affected_components — ignored components never surfaced
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["Pages", "Webhooks", "Codespaces", "Copilot AI Model Providers"],
+)
+def test_ignored_component_excluded_from_affected(name: str) -> None:
+    components = [Component(name=name, status="degraded_performance")]
+    result = compute_verdict(_make_response(indicator="minor", components=components))
+    assert result.affected_components == ()
+
+
+def test_ignored_component_mixed_with_non_ignored() -> None:
+    components = [
+        Component(name="Git Operations", status="degraded_performance"),
+        Component(name="Pages", status="partial_outage"),
+        Component(name="Webhooks", status="major_outage"),
+    ]
+    result = compute_verdict(_make_response(indicator="major", components=components))
+    assert result.affected_components == ("Git Operations",)

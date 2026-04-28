@@ -9,6 +9,7 @@ from github_status_bot.github_status import GitHubStatusResponse, Incident
 
 _DOWN_INDICATORS = {"minor", "major", "critical"}
 _NON_OPERATIONAL_STATUSES = {"degraded_performance", "partial_outage", "major_outage"}
+_IGNORED_COMPONENTS = {"Pages", "Webhooks", "Codespaces", "Copilot AI Model Providers"}
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,8 @@ def compute_verdict(status_response: GitHubStatusResponse) -> VerdictResult:
             duration_seconds = int((datetime.now(UTC) - earliest).total_seconds())
 
     affected_components = tuple(
-        c.name for c in status_response.components if c.status in _NON_OPERATIONAL_STATUSES
+        c.name for c in status_response.components
+        if c.status in _NON_OPERATIONAL_STATUSES and c.name not in _IGNORED_COMPONENTS
     )
 
     return VerdictResult(
