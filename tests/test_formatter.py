@@ -7,18 +7,22 @@ import pytest
 from github_status_bot.formatter import _format_duration, format_reply
 from github_status_bot.verdict import VerdictResult
 
+_SOURCE = "<https://www.githubstatus.com|GitHub's status page>"
+
 
 def _verdict(
     is_down: bool = False,
     indicator: str = "none",
     duration_seconds: int | None = None,
     has_fetch_error: bool = False,
+    affected_components: tuple[str, ...] = (),
 ) -> VerdictResult:
     return VerdictResult(
         is_down=is_down,
         indicator=indicator,
         duration_seconds=duration_seconds,
         has_fetch_error=has_fetch_error,
+        affected_components=affected_components,
     )
 
 
@@ -66,10 +70,7 @@ def test_format_reply_fetch_error() -> None:
 
 def test_format_reply_up() -> None:
     result = format_reply(_verdict(is_down=False, indicator="none"))
-    assert result == (
-        "GitHub appears to be *up*... for NOW. "
-        "Source: GitHub's official status page (all systems operational)."
-    )
+    assert result == f"GitHub appears to be *up*... for NOW.\n\nSource: {_SOURCE}"
 
 
 # ---------------------------------------------------------------------------
@@ -80,8 +81,12 @@ def test_format_reply_up() -> None:
 def test_format_reply_down_with_duration() -> None:
     result = format_reply(_verdict(is_down=True, indicator="major", duration_seconds=7920))
     assert result == (
-        "GitHub is *down* because AI DevOps is a blight on our land. "
-        "Source: GitHub's official status page (indicator: major, ~2h 12m)."
+        "GitHub is *down* because AI DevOps is a blight on our land.\n"
+        "\n"
+        "Severity: Major Outage\n"
+        "Time Down: ~2h 12m\n"
+        "\n"
+        f"Source: {_SOURCE}"
     )
 
 
@@ -99,13 +104,53 @@ def test_format_reply_down_with_short_duration() -> None:
 def test_format_reply_down_no_duration() -> None:
     result = format_reply(_verdict(is_down=True, indicator="major", duration_seconds=None))
     assert result == (
-        "GitHub is *down* because AI DevOps is a blight on our land. "
-        "Source: GitHub's official status page (indicator: major)."
+        "GitHub is *down* because AI DevOps is a blight on our land.\n"
+        "\n"
+        "Severity: Major Outage\n"
+        "\n"
+        f"Source: {_SOURCE}"
     )
     assert "None" not in result
 
 
 def test_format_reply_down_critical_no_duration() -> None:
     result = format_reply(_verdict(is_down=True, indicator="critical"))
-    assert "indicator: critical" in result
+    assert "Critical Outage" in result
     assert "*down*" in result
+
+
+# ---------------------------------------------------------------------------
+# format_reply — down with affected components
+# ---------------------------------------------------------------------------
+
+
+def test_format_reply_down_with_affected_components() -> None:
+    result = format_reply(
+        _verdict(
+            is_down=True,
+            indicator="minor",
+            duration_seconds=3600,
+            affected_components=("Git Operations", "API Requests"),
+        )
+    )
+    assert "Affected Area: Git Operations, API Requests" in result
+    assert "Severity: Degraded" in result
+    assert "Time Down: ~1h" in result
+    assert f"Source: {_SOURCE}" in result
+
+
+def test_format_reply_down_no_affected_components_omits_area_line() -> None:
+    result = format_reply(_verdict(is_down=True, indicator="major"))
+    assert "Affected Area" not in result
+    assert "Severity: Major Outage" in result
+    assert f"Source: {_SOURCE}" in result
+
+
+def test_format_reply_source_link_present_when_up() -> None:
+    result = format_reply(_verdict(is_down=False))
+    assert _SOURCE in result
+
+
+def test_format_reply_source_link_present_when_down() -> None:
+    result = format_reply(_verdict(is_down=True, indicator="minor"))
+    assert _SOURCE in result

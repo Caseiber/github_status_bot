@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from github_status_bot.verdict import VerdictResult
 
+_SEVERITY_LABELS: dict[str, str] = {
+    "minor": "Degraded",
+    "major": "Major Outage",
+    "critical": "Critical Outage",
+}
+
+_SOURCE = "<https://www.githubstatus.com|GitHub's status page>"
+
 
 def _format_duration(seconds: int) -> str:
     if seconds < 60:
@@ -26,16 +34,19 @@ def format_reply(verdict: VerdictResult) -> str:
         )
 
     if not verdict.is_down:
-        return (
-            "GitHub appears to be *up*... for NOW. "
-            "Source: GitHub's official status page (all systems operational)."
-        )
+        return f"GitHub appears to be *up*... for NOW.\n\nSource: {_SOURCE}"
 
-    detail = f"indicator: {verdict.indicator}"
+    lines = ["GitHub is *down* because AI DevOps is a blight on our land.", ""]
+
+    if verdict.affected_components:
+        lines.append(f"Affected Area: {', '.join(verdict.affected_components)}")
+
+    severity = _SEVERITY_LABELS.get(verdict.indicator, verdict.indicator.title())
+    lines.append(f"Severity: {severity}")
+
     if verdict.duration_seconds is not None:
-        detail += f", {_format_duration(verdict.duration_seconds)}"
+        lines.append(f"Time Down: {_format_duration(verdict.duration_seconds)}")
 
-    return (
-        f"GitHub is *down* because AI DevOps is a blight on our land. "
-        f"Source: GitHub's official status page ({detail})."
-    )
+    lines.extend(["", f"Source: {_SOURCE}"])
+
+    return "\n".join(lines)

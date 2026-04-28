@@ -10,10 +10,13 @@ import httpx
 from pytest_httpx import HTTPXMock
 
 from github_status_bot.github_status import (
+    COMPONENTS_URL,
     INCIDENTS_URL,
     STATUS_URL,
+    Component,
     GitHubStatusResponse,
     Incident,
+    _parse_components,
     _parse_dt,
     _parse_incidents,
     _parse_status,
@@ -107,6 +110,45 @@ def test_parse_incidents_skips_non_dict_items() -> None:
 
 
 # ---------------------------------------------------------------------------
+# _parse_components
+# ---------------------------------------------------------------------------
+
+
+def test_parse_components_all_operational() -> None:
+    data = fixture("components_all_operational.json")
+    components = _parse_components(data)
+    assert len(components) == 4
+    assert all(isinstance(c, Component) for c in components)
+    assert all(c.status == "operational" for c in components)
+
+
+def test_parse_components_partial_outage() -> None:
+    data = fixture("components_partial_outage.json")
+    components = _parse_components(data)
+    assert len(components) == 4
+    git_ops = next(c for c in components if c.name == "Git Operations")
+    assert git_ops.status == "degraded_performance"
+
+
+def test_parse_components_empty_list() -> None:
+    assert _parse_components({"components": []}) == []
+
+
+def test_parse_components_missing_key() -> None:
+    assert _parse_components({}) == []
+
+
+def test_parse_components_skips_nameless_items() -> None:
+    data = {"components": [{"id": "x", "name": "", "status": "operational"}]}
+    assert _parse_components(data) == []
+
+
+def test_parse_components_skips_non_dict_items() -> None:
+    data = {"components": ["not-a-dict", 42]}
+    assert _parse_components(data) == []
+
+
+# ---------------------------------------------------------------------------
 # fetch_github_status — async (HTTP mocked via pytest-httpx)
 # ---------------------------------------------------------------------------
 
@@ -114,6 +156,7 @@ def test_parse_incidents_skips_non_dict_items() -> None:
 async def test_fetch_up_no_incidents(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(url=STATUS_URL, json=fixture("status_none.json"))
     httpx_mock.add_response(url=INCIDENTS_URL, json=fixture("unresolved_empty.json"))
+    httpx_mock.add_response(url=COMPONENTS_URL, json=fixture("components_all_operational.json"))
 
     result = await fetch_github_status()
 
@@ -121,11 +164,14 @@ async def test_fetch_up_no_incidents(httpx_mock: HTTPXMock) -> None:
     assert result.indicator == "none"
     assert result.incidents == []
     assert result.fetch_error is False
+    assert len(result.components) == 4
+    assert all(c.status == "operational" for c in result.components)
 
 
 async def test_fetch_down_major_with_incident(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(url=STATUS_URL, json=fixture("status_major.json"))
     httpx_mock.add_response(url=INCIDENTS_URL, json=fixture("unresolved_active.json"))
+    httpx_mock.add_response(url=COMPONENTS_URL, json=fixture("components_partial_outage.json"))
 
     result = await fetch_github_status()
 
@@ -135,6 +181,7 @@ async def test_fetch_down_major_with_incident(httpx_mock: HTTPXMock) -> None:
     assert result.incidents[0].started_at is not None
     assert result.incidents[0].resolved_at is None
     assert result.fetch_error is False
+    assert any(c.status == "degraded_performance" for c in result.components)
 
 
 async def test_fetch_incident_missing_started_at(httpx_mock: HTTPXMock) -> None:
@@ -142,12 +189,27 @@ async def test_fetch_incident_missing_started_at(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
         url=INCIDENTS_URL, json=fixture("unresolved_missing_started_at.json")
     )
+    httpx_mock.add_response(url=COMPONENTS_URL, json=fixture("components_all_operational.json"))
 
     result = await fetch_github_status()
 
     assert result.fetch_error is False
     assert len(result.incidents) == 1
     assert result.incidents[0].started_at is None
+
+
+async def test_fetch_components_failure_returns_empty_components(
+    httpx_mock: HTTPXMock,
+) -> None:
+    httpx_mock.add_response(url=STATUS_URL, json=fixture("status_none.json"))
+    httpx_mock.add_response(url=INCIDENTS_URL, json=fixture("unresolved_empty.json"))
+    httpx_mock.add_response(url=COMPONENTS_URL, status_code=500)
+    httpx_mock.add_response(url=COMPONENTS_URL, status_code=500)  # retry
+
+    result = await fetch_github_status()
+
+    assert result.fetch_error is False
+    assert result.components == []
 
 
 async def test_fetch_status_500_both_attempts_returns_fetch_error(
@@ -178,6 +240,7 @@ async def test_fetch_retry_succeeds_on_second_attempt(httpx_mock: HTTPXMock) -> 
     httpx_mock.add_response(url=STATUS_URL, status_code=500)  # first attempt
     httpx_mock.add_response(url=STATUS_URL, json=fixture("status_none.json"))  # retry
     httpx_mock.add_response(url=INCIDENTS_URL, json=fixture("unresolved_empty.json"))
+    httpx_mock.add_response(url=COMPONENTS_URL, json=fixture("components_all_operational.json"))
 
     result = await fetch_github_status()
 

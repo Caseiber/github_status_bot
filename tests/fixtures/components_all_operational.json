@@ -1,0 +1,13 @@
+{
+  "page": {
+    "id": "kctbh9vrtdwd",
+    "name": "GitHub",
+    "url": "https://www.githubstatus.com"
+  },
+  "components": [
+    {"id": "b13yz5g2h45q", "name": "Git Operations", "status": "operational"},
+    {"id": "br0l2tvcx85d", "name": "API Requests", "status": "operational"},
+    {"id": "8l4ym3o0q9t8", "name": "GitHub Actions", "status": "operational"},
+    {"id": "hhtssxt0f5v2", "name": "GitHub Packages", "status": "operational"}
+  ]
+}

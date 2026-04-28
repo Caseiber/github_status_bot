@@ -55,7 +55,8 @@ def _is_rate_limited(channel_id: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _FETCH_ERROR_VERDICT = VerdictResult(
-    is_down=False, indicator="unknown", duration_seconds=None, has_fetch_error=True
+    is_down=False, indicator="unknown", duration_seconds=None, has_fetch_error=True,
+    affected_components=(),
 )
 
 

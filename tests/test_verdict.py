@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from github_status_bot.github_status import GitHubStatusResponse, Incident
+from github_status_bot.github_status import Component, GitHubStatusResponse, Incident
 from github_status_bot.verdict import VerdictResult, compute_verdict
 
 _NOW = datetime.now(UTC)
@@ -13,11 +13,13 @@ _NOW = datetime.now(UTC)
 def _make_response(
     indicator: str = "none",
     incidents: list[Incident] | None = None,
+    components: list[Component] | None = None,
     fetch_error: bool = False,
 ) -> GitHubStatusResponse:
     return GitHubStatusResponse(
         indicator=indicator,
         incidents=incidents or [],
+        components=components or [],
         fetch_error=fetch_error,
     )
 
@@ -38,7 +40,11 @@ def _resolved_incident(started_at: datetime | None = None) -> Incident:
 def test_all_clear_is_up() -> None:
     result = compute_verdict(_make_response(indicator="none"))
     assert result == VerdictResult(
-        is_down=False, indicator="none", duration_seconds=None, has_fetch_error=False
+        is_down=False,
+        indicator="none",
+        duration_seconds=None,
+        has_fetch_error=False,
+        affected_components=(),
     )
 
 
@@ -106,6 +112,7 @@ def test_fetch_error_propagated() -> None:
     assert result.has_fetch_error is True
     assert result.is_down is False
     assert result.duration_seconds is None
+    assert result.affected_components == ()
 
 
 # ---------------------------------------------------------------------------
@@ -136,3 +143,48 @@ def test_multiple_incidents_one_missing_started_at_uses_available() -> None:
     assert result.is_down is True
     assert result.duration_seconds is not None
     assert result.duration_seconds >= 599
+
+
+# ---------------------------------------------------------------------------
+# affected_components — derived from non-operational components
+# ---------------------------------------------------------------------------
+
+
+def test_all_operational_components_yields_empty_affected() -> None:
+    components = [
+        Component(name="Git Operations", status="operational"),
+        Component(name="API Requests", status="operational"),
+    ]
+    result = compute_verdict(_make_response(indicator="none", components=components))
+    assert result.affected_components == ()
+
+
+def test_degraded_component_included_in_affected() -> None:
+    components = [
+        Component(name="Git Operations", status="degraded_performance"),
+        Component(name="API Requests", status="operational"),
+    ]
+    result = compute_verdict(_make_response(indicator="minor", components=components))
+    assert result.affected_components == ("Git Operations",)
+
+
+def test_partial_outage_component_included_in_affected() -> None:
+    components = [Component(name="GitHub Actions", status="partial_outage")]
+    result = compute_verdict(_make_response(indicator="minor", components=components))
+    assert result.affected_components == ("GitHub Actions",)
+
+
+def test_major_outage_component_included_in_affected() -> None:
+    components = [Component(name="GitHub Packages", status="major_outage")]
+    result = compute_verdict(_make_response(indicator="major", components=components))
+    assert result.affected_components == ("GitHub Packages",)
+
+
+def test_multiple_non_operational_components_all_included() -> None:
+    components = [
+        Component(name="Git Operations", status="degraded_performance"),
+        Component(name="API Requests", status="partial_outage"),
+        Component(name="GitHub Actions", status="operational"),
+    ]
+    result = compute_verdict(_make_response(indicator="major", components=components))
+    assert result.affected_components == ("Git Operations", "API Requests")

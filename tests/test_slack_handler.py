@@ -11,7 +11,9 @@ import github_status_bot.slack_handler as handler
 from github_status_bot.github_status import GitHubStatusResponse
 from github_status_bot.slack_handler import handle_mention
 
-_UP_RESPONSE = GitHubStatusResponse(indicator="none", incidents=[], fetch_error=False)
+_UP_RESPONSE = GitHubStatusResponse(
+    indicator="none", incidents=[], components=[], fetch_error=False
+)
 
 
 @pytest.fixture(autouse=True)
