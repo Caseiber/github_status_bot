@@ -191,21 +191,22 @@ def test_full_pipeline_retry_event_suppressed(httpx_mock: HTTPXMock) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Rate limit — second mention in same channel within cooldown ignored
+# Two distinct mentions both answered (no rate-limit)
 # ---------------------------------------------------------------------------
 
 
-def test_full_pipeline_rate_limit_same_channel(httpx_mock: HTTPXMock) -> None:
+def test_two_distinct_mentions_both_answered(httpx_mock: HTTPXMock) -> None:
+    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
     _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
 
     say = MagicMock()
     first = _channel_event()
-    second = {**_channel_event(), "event_id": "Ev01CHANNEL2"}  # different event, same channel
+    second = {**_channel_event(), "event_id": "Ev01CHANNEL2"}
 
     handle_mention(first, say)
-    handle_mention(second, say)  # same channel, within cooldown
+    handle_mention(second, say)
 
-    assert say.call_count == 1
+    assert say.call_count == 2
 
 
 # ---------------------------------------------------------------------------

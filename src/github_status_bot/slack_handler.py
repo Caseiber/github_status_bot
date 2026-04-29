@@ -40,19 +40,6 @@ def _is_duplicate(event_id: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Per-channel rate-limit guard (T016)
-# ---------------------------------------------------------------------------
-
-_COOLDOWN_SECONDS: float = 5.0
-_channel_cooldown: dict[str, float] = {}
-
-
-def _is_rate_limited(channel_id: str) -> bool:
-    last = _channel_cooldown.get(channel_id)
-    return last is not None and time.monotonic() - last < _COOLDOWN_SECONDS
-
-
-# ---------------------------------------------------------------------------
 # Service name parsing
 # ---------------------------------------------------------------------------
 
@@ -95,10 +82,6 @@ def handle_mention(event: dict[str, Any], say: Any) -> None:
         logger.info("Suppressed duplicate event %s", event_id)
         return
 
-    if _is_rate_limited(channel):
-        logger.info("Rate-limited in channel %s; ignoring event %s", channel, event_id)
-        return
-
     try:
         if service_key is not None:
             cfg = SERVICES[service_key]
@@ -121,7 +104,6 @@ def handle_mention(event: dict[str, Any], say: Any) -> None:
         kwargs["thread_ts"] = thread_ts
 
     say(**kwargs)
-    _channel_cooldown[channel] = time.monotonic()
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -1,4 +1,4 @@
-"""Unit tests for slack_handler.py — T015 idempotency, T016 rate-limit, T017 threads."""
+"""Unit tests for slack_handler.py — T015 idempotency, T017 threads."""
 
 from __future__ import annotations
 
@@ -59,11 +59,8 @@ def test_duplicate_event_id_posts_only_once(
 
 
 def test_distinct_event_ids_each_post(mock_fetch: AsyncMock, say: MagicMock) -> None:
-    with patch("time.monotonic") as mock_time:
-        mock_time.return_value = 0.0
-        handle_mention(_event("ev1"), say)
-        mock_time.return_value = handler._COOLDOWN_SECONDS + 1.0
-        handle_mention(_event("ev2"), say)
+    handle_mention(_event("ev1"), say)
+    handle_mention(_event("ev2"), say)
     assert say.call_count == 2
 
 
@@ -73,33 +70,8 @@ def test_seen_event_id_expires_after_ttl(
     with patch("time.monotonic") as mock_time:
         mock_time.return_value = 0.0
         handle_mention(_event("ev1"), say)
-        # Advance past both the seen-TTL (60s) and the cooldown (5s)
         mock_time.return_value = handler._SEEN_TTL + 1.0
         handle_mention(_event("ev1"), say)
-    assert say.call_count == 2
-
-
-# ---------------------------------------------------------------------------
-# T016 — Rate-limit guard
-# ---------------------------------------------------------------------------
-
-
-def test_second_mention_within_cooldown_is_ignored(
-    mock_fetch: AsyncMock, say: MagicMock
-) -> None:
-    handle_mention(_event("ev1"), say)
-    handle_mention(_event("ev2"), say)
-    assert say.call_count == 1
-
-
-def test_mention_after_cooldown_is_answered(
-    mock_fetch: AsyncMock, say: MagicMock
-) -> None:
-    with patch("time.monotonic") as mock_time:
-        mock_time.return_value = 0.0
-        handle_mention(_event("ev1"), say)
-        mock_time.return_value = handler._COOLDOWN_SECONDS + 1.0
-        handle_mention(_event("ev2"), say)
     assert say.call_count == 2
 
 
@@ -136,9 +108,9 @@ def test_cache_at_capacity_evicts_oldest_and_accepts_new(
         handler._seen_events[f"old{i}"] = now
 
     with patch("time.monotonic") as mock_time:
-        mock_time.return_value = now + handler._COOLDOWN_SECONDS + 1.0
+        mock_time.return_value = now + 1.0
         handle_mention(_event("ev_fill"), say)  # fills to capacity
-        mock_time.return_value = now + 2 * (handler._COOLDOWN_SECONDS + 1.0)
+        mock_time.return_value = now + 2.0
         handle_mention(_event("ev_over"), say)  # triggers eviction
 
     assert say.call_count == 2
