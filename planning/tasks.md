@@ -22,8 +22,8 @@
 | E011: Phase 2 — Validation | 2 | 0 | 0 | 2 |
 | E012: Phase 3 — Service Abstraction | 3 | 3 | 0 | 0 |
 | E013: Phase 3 — Handler Routing | 2 | 2 | 0 | 0 |
-| E014: Phase 3 — Validation | 1 | 0 | 0 | 1 |
-| **Total** | **35** | **27** | **0** | **8** |
+| E014: Phase 3 — Validation | 1 | 1 | 0 | 0 |
+| **Total** | **35** | **28** | **0** | **7** |
 
 **Last Updated**: 2026-04-28
 
@@ -1068,15 +1068,15 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [ ] `@github_status_bot github` returns GitHub-specific detail reply in workspace
-- [ ] `@github_status_bot claude` returns Claude-specific detail reply in workspace
-- [ ] `@github_status_bot` (bare mention) returns compact two-line summary + hint
-- [ ] Unknown keyword (e.g. `@github_status_bot foobar`) defaults to GitHub full reply
-- [ ] Bot restarted with latest code from `feat/phase3-multi-service` branch
+- [x] `@github_status_bot github` returns GitHub-specific detail reply in workspace
+- [x] `@github_status_bot claude` returns Claude-specific detail reply in workspace
+- [x] `@github_status_bot` (bare mention) returns full GitHub reply (default service)
+- [x] Unknown keyword (e.g. `@github_status_bot foobar`) returns error reply listing available services
+- [x] Bot restarted with latest code from `feat/phase3-multi-service` branch
 
 **Definition of Done**:
 
-- [ ] All four manual test cases confirmed; branch ready to merge
+- [x] All manual test cases confirmed by user; branch ready to merge
 
 **Git Workflow**:
 
