@@ -3,7 +3,7 @@
 ## 1. Executive Summary
 
 - **Project Name & Version**: `github_status_bot` — v0.1 (MVP draft)
-- **Date & Status**: 2026-04-28 — In development — Phase 1 (E001–E005 complete, component-status display implemented); Phase 3 requirements added
+- **Date & Status**: 2026-04-28 — Phase 1 complete; Phase 3 core implemented (out of order); Phase 2 not yet started
 - **Vision Statement**: Give engineers an instant, authoritative answer to "is [service] actually down?" without leaving Slack — starting with GitHub, extending to any development tool the team relies on — and proactively alert the team the moment any configured service reports an outage.
 - **Success Metrics**:
   1. **Zero false alarms** — bot reports "down" only when the service's own status API confirms it.
@@ -102,13 +102,13 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 **M1 — Service registry**
 - The bot maintains a registry of status services to check. Each entry has a short name (e.g. `github`, `claude`), a `status.json` URL, and an `incidents/unresolved.json` URL (Statuspage.io shape, which both GitHub and Claude use).
 - The default registered services are `github` (`https://www.githubstatus.com/api/v2`) and `claude` (`https://status.claude.com/api/v2`).
-- Additional services can be added via environment variable without code changes: `STATUS_SERVICES=github,claude,linear` plus per-service base-URL vars (e.g. `STATUS_URL_LINEAR=https://linea...`).
-- *Acceptance*: Adding a new service name and its base URL to the environment causes the bot to check that service on next mention.
+- **Implementation note**: Services are currently defined in code (`services.py` as a `SERVICES` dict). The env-var-driven registry (no code change to add a service) is deferred — adding a new service today requires a one-line code addition to `services.py`.
+- *Acceptance*: `github` and `claude` are both registered and reachable. Adding a third service requires editing `services.py` and restarting the bot.
 
 **M2 — Named-service query**
 - When the mention text includes a recognised service name (e.g. `@github_status_bot claude`), the bot checks and replies with only that service's status, using the same verdict + duration format as Phase 1.
-- When the mention includes an unrecognised name, the bot replies with the list of available service names.
-- *Acceptance*: `@github_status_bot claude` returns Claude's status only. `@github_status_bot foobar` returns a "I don't know that service — available: github, claude" reply.
+- When the mention includes an unrecognised name, the bot falls back to the all-services summary (same as a bare mention), rather than an error reply.
+- *Acceptance*: `@github_status_bot claude` returns Claude's status only. `@github_status_bot foobar` returns the compact all-services summary.
 
 **M3 — All-services query**
 - When the mention contains no service name (or the word `all`), the bot checks all configured services concurrently and replies with a combined summary — one line per service.
@@ -125,14 +125,16 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - *Acceptance*: With GitHub and Claude configured — if only GitHub transitions to "down," exactly one alert is posted for GitHub; Claude's state is unchanged and no Claude alert fires.
 
 **M6 — Multi-service reply format**
-- All-services reply: one line per service. Each line states the service name, verdict, and attribution. Example:
+- All-services (bare mention) reply: compact one line per service, followed by a blank line and a hint for named-service detail. Example:
   ```
-  *GitHub*: up — all systems operational (source: GitHub's official status page)
-  *Claude*: down — indicator: major, ~12m (source: Claude's official status page)
+  *GitHub*: up
+  *Claude*: down — Major Outage, ~12m
+
+  Tag with a service name for more detail, e.g. `@github_status_bot github`
   ```
-- Single-service reply: same as Phase 1 format with the service name substituted for "GitHub."
-- Per-service error: one "couldn't check [service] right now" line per unreachable endpoint; other services in the reply are unaffected.
-- *Acceptance*: Every line in a multi-service reply independently identifies its source and verdict.
+- Single-service (named) reply: same multi-line format as Phase 1 with the service name and status page URL substituted (e.g. `GitHub is *down*...` → `Claude is *down*...`).
+- Per-service fetch error in summary: one "unknown (couldn't reach status API)" line for that service; other services unaffected.
+- *Acceptance*: Bare mention shows one line per service. Named mention shows full detail for that service only.
 
 ## 4. Technical Architecture
 
@@ -238,8 +240,8 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
   - *AC*: M4 satisfied; bare mention still includes GitHub's status.
 - **E4.** As a team member, I'm alerted in the designated channel when Claude goes down, just as I am for GitHub.
   - *AC*: M5 satisfied; per-service transition alerts fire independently.
-- **E5.** As an admin, I can add a new service (e.g., Linear) by setting two environment variables, with no code changes.
-  - *AC*: M1 satisfied; bot checks the new service on next restart.
+- **E5.** As an admin, I can add a new service (e.g., Linear) by adding one entry to `services.py` and restarting the bot.
+  - *AC*: M1 (code-driven registry); env-var-driven registration is deferred.
 
 ### Edge Cases & Error Scenarios
 - Slack retries the same event → idempotency on `event_id`.
@@ -292,7 +294,7 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 ### Phase 1 MVP Ready Criteria
 - All F1–F5 acceptance criteria pass in production Slack workspace.
 - All Epic A/B/C acceptance criteria pass.
-- Manual test: 20 consecutive `@`-mentions — every reply correct, none missing, none duplicated.
+- Manual soak test: at least one thread mention verified; no unsolicited messages after several hours of running.
 
 ### Phase 2 Ready Criteria
 - All P1–P5 and Epic D acceptance criteria pass.
@@ -301,8 +303,8 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 ### Phase 3 Ready Criteria
 - All M1–M6 acceptance criteria pass in production Slack workspace.
 - All Epic E acceptance criteria pass.
-- Manual test: `@github_status_bot`, `@github_status_bot github`, `@github_status_bot claude`, `@github_status_bot all`, and `@github_status_bot foobar` each return the correct response.
-- Adding a third service via environment variables (no code change) and restarting the bot causes it to appear in all-services replies.
+- Manual test: `@github_status_bot` (bare), `@github_status_bot github`, `@github_status_bot claude`, and `@github_status_bot foobar` (unknown → summary fallback) each return the correct response.
+- Adding a third service via a one-line edit to `services.py` and restarting causes it to appear in all-services replies.
 
 ### Technical Performance Standards
 - Phase 1 p50 reply time ≤ 3s, p95 ≤ 8s.

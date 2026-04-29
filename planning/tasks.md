@@ -1,7 +1,7 @@
 # github_status_bot — Development Tasks
 
 **Generated from**: `planning/prd.md` on 2026-04-27
-**Development Phase**: Phase 1 MVP → Phase 2 Proactive Alerting
+**Development Phase**: Phase 1 MVP complete → Phase 3 (out-of-order) in progress → Phase 2 Proactive Alerting pending
 
 ---
 
@@ -20,7 +20,10 @@
 | E009: Phase 2 — State Model | 3 | 0 | 0 | 3 |
 | E010: Phase 2 — Poller | 3 | 0 | 0 | 3 |
 | E011: Phase 2 — Validation | 2 | 0 | 0 | 2 |
-| **Total** | **30** | **22** | **0** | **8** |
+| E012: Phase 3 — Service Abstraction | 3 | 3 | 0 | 0 |
+| E013: Phase 3 — Handler Routing | 2 | 2 | 0 | 0 |
+| E014: Phase 3 — Validation | 1 | 0 | 0 | 1 |
+| **Total** | **36** | **28** | **0** | **8** |
 
 **Last Updated**: 2026-04-28
 
@@ -28,6 +31,12 @@
 
 ## Next Priority Tasks
 
+Phase 1 and Phase 3 core implementation are complete. Next up:
+
+1. **T044** — Phase 3 live validation (manual test in workspace with Claude + GitHub)
+2. **T028–T033** — Phase 2 proactive alerting (do not begin until Phase 1 stable ≥ 2 weeks)
+
+### Completed
 1. ~~**T001**~~ — ✅ Initialize Python project with `uv` and `src/` layout
 2. ~~**T002**~~ — ✅ Configure `ruff`, `mypy --strict`, `pytest`
 3. ~~**T004**~~ — ✅ Create GitHub Status API test fixtures
@@ -47,6 +56,12 @@
 17. ~~**T021**~~ — ✅ Configure `.env` and run bot persistently
 18. ~~**T027**~~ — ✅ README and project documentation
 19. ~~**T026**~~ — ✅ Phase 1 soak test
+20. ~~**T038**~~ — ✅ Generalize status fetcher for any Statuspage.io service
+21. ~~**T039**~~ — ✅ Create service registry (`services.py`)
+22. ~~**T040**~~ — ✅ Update verdict module for per-service ignored components
+23. ~~**T041**~~ — ✅ Update formatter for multi-service output
+24. ~~**T042**~~ — ✅ Update handler for named-service routing + bare mention summary
+25. ~~**T043**~~ — ✅ Update all tests for Phase 3 (99 tests, 100% coverage)
 
 ---
 
@@ -883,6 +898,206 @@
 **Git Workflow**:
 
 - Branch: `feat/t037-phase2-docs`
+
+---
+
+### Epic E012: Phase 3 — Service Abstraction
+
+> **Implemented out of order** (before Phase 2). Branch: `feat/phase3-multi-service`.
+
+**Priority**: Medium (Phase 3)
+**Dependencies**: E008
+
+---
+
+#### Task T038: Generalize status fetcher for any Statuspage.io service
+
+**Priority**: Medium
+**Effort**: 1 hour
+**Dependencies**: T005
+**PRD Reference**: M1, §4 Outbound API Design
+
+**Acceptance Criteria**:
+
+- [x] `GitHubStatusResponse` renamed to `ServiceStatusResponse`
+- [x] `fetch_github_status()` replaced by `fetch_service_status(base_url: str)`
+- [x] All three endpoint paths (`/status.json`, `/incidents/unresolved.json`, `/components.json`) derived from `base_url`
+- [x] Hardcoded URL constants removed from module
+- [x] `mypy --strict` passes
+
+**Definition of Done**:
+
+- [x] All unit tests updated and passing; 100% coverage maintained
+
+**Git Workflow**:
+
+- Branch: `feat/phase3-multi-service`
+
+---
+
+#### Task T039: Create service registry (`services.py`)
+
+**Priority**: Medium
+**Effort**: 1 hour
+**Dependencies**: T038
+**PRD Reference**: M1
+
+**Acceptance Criteria**:
+
+- [x] `ServiceConfig` dataclass: `display_name`, `base_url`, `status_page_url`, `ignored_components`
+- [x] `SERVICES` dict with `"github"` and `"claude"` entries
+- [x] GitHub ignored components (`Pages`, `Webhooks`, `Codespaces`, `Copilot AI Model Providers`) live in `ServiceConfig`, not `verdict.py`
+- [x] Claude has no ignored components by default
+- [x] `mypy --strict` passes
+
+**Definition of Done**:
+
+- [x] Module implemented; covered by handler and integration tests
+
+**Git Workflow**:
+
+- Branch: `feat/phase3-multi-service`
+
+---
+
+#### Task T040: Update verdict module for per-service ignored components
+
+**Priority**: Medium
+**Effort**: 30 minutes
+**Dependencies**: T039
+**PRD Reference**: M1, F2
+
+**Acceptance Criteria**:
+
+- [x] `_IGNORED_COMPONENTS` constant removed from `verdict.py`
+- [x] `compute_verdict` accepts `ignored_components: frozenset[str] = frozenset()` parameter
+- [x] Callers pass `cfg.ignored_components` from `ServiceConfig`
+- [x] `mypy --strict` passes
+
+**Definition of Done**:
+
+- [x] All verdict tests updated; 100% coverage
+
+**Git Workflow**:
+
+- Branch: `feat/phase3-multi-service`
+
+---
+
+### Epic E013: Phase 3 — Handler Routing
+
+**Priority**: Medium (Phase 3)
+**Dependencies**: E012
+
+---
+
+#### Task T041: Update formatter for multi-service output
+
+**Priority**: Medium
+**Effort**: 1 hour
+**Dependencies**: T011, T039
+**PRD Reference**: M6
+
+**Acceptance Criteria**:
+
+- [x] `format_reply(verdict, service_name, status_page_url)` — service name and URL are parameters, not hardcoded
+- [x] `format_summary_line(verdict, service_name) -> str` — compact one-line status per service
+- [x] `format_summary_reply(lines, bot_name) -> str` — joins lines + hint: `"Tag with a service name for more detail, e.g. @{bot_name} github"`
+- [x] Summary line format: `*{name}*: up` / `*{name}*: down — {severity}, {duration}` / `*{name}*: unknown (...)`
+- [x] `mypy --strict` passes
+
+**Definition of Done**:
+
+- [x] Unit tests covering all summary and reply variants; 100% coverage
+
+**Git Workflow**:
+
+- Branch: `feat/phase3-multi-service`
+
+---
+
+#### Task T042: Update handler for named-service routing + bare mention summary
+
+**Priority**: Medium
+**Effort**: 1 hour
+**Dependencies**: T041, T039
+**PRD Reference**: M2, M3
+
+**Acceptance Criteria**:
+
+- [x] `@github_status_bot github` → full detail reply for GitHub only
+- [x] `@github_status_bot claude` → full detail reply for Claude only
+- [x] `@github_status_bot` (bare) → compact summary for all services + hint line
+- [x] Unknown service keyword falls back to bare mention (summary) behavior
+- [x] Service keyword matching is case-insensitive
+- [x] `_FETCH_ERROR_VERDICT` replaced with `_UNEXPECTED_ERROR_REPLY` string
+- [x] `mypy --strict` passes
+
+**Definition of Done**:
+
+- [x] Unit and integration tests for all routing paths; 100% coverage
+
+**Git Workflow**:
+
+- Branch: `feat/phase3-multi-service`
+
+---
+
+#### Task T043: Update all tests for Phase 3
+
+**Priority**: Medium
+**Effort**: 2 hours
+**Dependencies**: T038–T042
+
+**Acceptance Criteria**:
+
+- [x] `test_github_status.py` — uses `fetch_service_status`, `ServiceStatusResponse`, local URL constants
+- [x] `test_verdict.py` — uses `ServiceStatusResponse`; ignored-component tests pass `ignored_components` explicitly
+- [x] `test_formatter.py` — all `format_reply` calls include `service_name` and `status_page_url`; new tests for `format_summary_line` and `format_summary_reply`
+- [x] `test_slack_handler.py` — patches `fetch_service_status`; new tests for bare mention, named-service routing, unknown keyword
+- [x] `test_integration.py` — URL constants replaced with inline strings; new tests for bare mention and Claude named service
+- [x] `slack_mention_bare.json` fixture added; existing fixtures updated with service keyword in `text`
+- [x] 99 tests passing; 100% coverage; `mypy --strict` clean
+
+**Definition of Done**:
+
+- [x] All checks green on `feat/phase3-multi-service`
+
+**Git Workflow**:
+
+- Branch: `feat/phase3-multi-service`
+
+---
+
+### Epic E014: Phase 3 — Validation
+
+**Priority**: Medium (Phase 3)
+**Dependencies**: E013
+
+---
+
+#### Task T044: Phase 3 live validation
+
+**Priority**: Medium
+**Effort**: 1 hour
+**Dependencies**: T042, T043
+**PRD Reference**: §8 Phase 3 Ready Criteria
+
+**Acceptance Criteria**:
+
+- [ ] `@github_status_bot github` returns GitHub-specific detail reply in workspace
+- [ ] `@github_status_bot claude` returns Claude-specific detail reply in workspace
+- [ ] `@github_status_bot` (bare mention) returns compact two-line summary + hint
+- [ ] Unknown keyword (e.g. `@github_status_bot foobar`) returns compact summary (fallback behavior)
+- [ ] Bot restarted with latest code from `feat/phase3-multi-service` branch
+
+**Definition of Done**:
+
+- [ ] All four manual test cases confirmed; branch ready to merge
+
+**Git Workflow**:
+
+- Branch: `feat/phase3-multi-service`
 
 ---
 
