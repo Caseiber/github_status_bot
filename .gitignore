@@ -1,6 +1,7 @@
 .claude/
 .devcontainer/
 .idea/
+.DS_STORE
 
 # Python
 __pycache__/
@@ -25,3 +26,4 @@ htmlcov/
 .aws-sam/
 samconfig.toml
 /uv.lock
+/state/gh_status_state.json
