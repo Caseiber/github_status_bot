@@ -1,6 +1,7 @@
 .claude/
 .devcontainer/
 .idea/
+state/
 
 # Python
 __pycache__/
@@ -8,6 +9,7 @@ __pycache__/
 *.egg-info/
 dist/
 .venv/
+.DS_STORE
 
 # Tools
 .mypy_cache/
