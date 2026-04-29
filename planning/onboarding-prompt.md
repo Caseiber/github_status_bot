@@ -43,7 +43,7 @@ Bot is silent until `@`-mentioned. On mention:
 3. Fetches `{base_url}/components.json` (optional — failure returns `components=[]`)
 4. Replies once in the same channel/thread with verdict + affected components + severity + duration + source
 
-For bare mentions (no service name), replies with a compact one-line-per-service summary and a hint.
+For bare mentions (no service name) or unrecognised service names, defaults to GitHub — the primary use case.
 
 **Requirements**: F1–F5 in `planning/prd.md`. No database. No polling. No scheduled work.
 
@@ -200,15 +200,11 @@ Source: <https://www.githubstatus.com|GitHub's status page>
 `Time Down` omitted when no `started_at` is available.
 Severity labels: `minor` → `Degraded`, `major` → `Major Outage`, `critical` → `Critical Outage`.
 
-**Bare mention** (`@bot` with no service name):
-```
-*GitHub*: up
-*Claude*: down — Major Outage, ~12m
+**Bare mention or unknown service** (`@bot` / `@bot jenkins`):
 
-Tag with a service name for more detail, e.g. `@github_status_bot github`
-```
+Same as `@bot github` — returns the full GitHub reply. GitHub is the default service.
 
-**API unreachable** (named service):
+**API unreachable**:
 ```
 Couldn't check GitHub's status right now — the status API didn't respond. Try again in a moment.
 ```

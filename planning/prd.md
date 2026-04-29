@@ -110,13 +110,12 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - When the mention includes an unrecognised name, the bot falls back to the all-services summary (same as a bare mention), rather than an error reply.
 - *Acceptance*: `@github_status_bot claude` returns Claude's status only. `@github_status_bot foobar` returns the compact all-services summary.
 
-**M3 — All-services query**
-- When the mention contains no service name (or the word `all`), the bot checks all configured services concurrently and replies with a combined summary — one line per service.
-- Concurrency model mirrors Phase 1: both endpoints for each service are fetched concurrently, subject to the same 2 s timeout and single-retry policy.
-- *Acceptance*: With GitHub and Claude configured, a bare `@github_status_bot` mention returns a reply with one status line per service.
+**M3 — Default service**
+- When the mention contains no service name (or an unrecognised name), the bot defaults to GitHub — the primary use case.
+- *Acceptance*: A bare `@github_status_bot` mention returns the full GitHub status reply, identical to `@github_status_bot github`.
 
 **M4 — Backward compatibility**
-- A bare `@github_status_bot` mention continues to return GitHub's status as the first (or only) line of the reply. If GitHub is the only configured service, the reply is functionally identical to Phase 1.
+- A bare `@github_status_bot` mention returns GitHub's full status reply, unchanged from Phase 1 behaviour.
 - *Acceptance*: Existing Phase 1 users who don't change their mention text see no regression.
 
 **M5 — Phase 2 poller extended to all services**
@@ -124,17 +123,11 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - A transition on any service triggers an appropriately labelled alert in `ALERT_CHANNEL_ID`. Services that have not transitioned produce no alert.
 - *Acceptance*: With GitHub and Claude configured — if only GitHub transitions to "down," exactly one alert is posted for GitHub; Claude's state is unchanged and no Claude alert fires.
 
-**M6 — Multi-service reply format**
-- All-services (bare mention) reply: compact one line per service, followed by a blank line and a hint for named-service detail. Example:
-  ```
-  *GitHub*: up
-  *Claude*: down — Major Outage, ~12m
-
-  Tag with a service name for more detail, e.g. `@github_status_bot github`
-  ```
-- Single-service (named) reply: same multi-line format as Phase 1 with the service name and status page URL substituted (e.g. `GitHub is *down*...` → `Claude is *down*...`).
-- Per-service fetch error in summary: one "unknown (couldn't reach status API)" line for that service; other services unaffected.
-- *Acceptance*: Bare mention shows one line per service. Named mention shows full detail for that service only.
+**M6 — Reply format**
+- All replies use the same full multi-line format as Phase 1, with the service name and status page URL substituted.
+- Bare mention and unknown service name → full GitHub reply (default service).
+- Named service mention → full reply for that service only.
+- *Acceptance*: `@github_status_bot` and `@github_status_bot github` produce identical output. `@github_status_bot claude` produces the same format with Claude's name and status page.
 
 ## 4. Technical Architecture
 
@@ -233,8 +226,8 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 ### Epic E — Check any dev tool on demand (Phase 3)
 - **E1.** As an engineer, I can type `@github_status_bot claude` and receive Claude's status without knowing which URL to visit.
   - *AC*: M2 satisfied; reply attributes to Claude's official status page.
-- **E2.** As an engineer, typing `@github_status_bot` (no service name) shows me the status of all configured tools in one reply.
-  - *AC*: M3 satisfied; one line per service, all fetched concurrently.
+- **E2.** As an engineer, typing `@github_status_bot` (no service name) gives me GitHub's status immediately — the most common use case.
+  - *AC*: M3 satisfied; bare mention returns full GitHub reply.
 - **E3.** As an engineer, my existing `@github_status_bot` workflow for GitHub is unchanged.
   - *AC*: M4 satisfied; bare mention still includes GitHub's status.
 - **E4.** As a team member, I'm alerted in the designated channel when Claude goes down, just as I am for GitHub.
@@ -302,7 +295,7 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 ### Phase 3 Ready Criteria
 - All M1–M6 acceptance criteria pass in production Slack workspace.
 - All Epic E acceptance criteria pass.
-- Manual test: `@github_status_bot` (bare), `@github_status_bot github`, `@github_status_bot claude`, and `@github_status_bot foobar` (unknown → summary fallback) each return the correct response.
+- Manual test: `@github_status_bot` (bare → GitHub), `@github_status_bot github`, `@github_status_bot claude`, and `@github_status_bot foobar` (unknown → GitHub default) each return the correct response.
 - Adding a third service via a one-line edit to `services.py` and restarting causes it to appear in all-services replies.
 
 ### Technical Performance Standards

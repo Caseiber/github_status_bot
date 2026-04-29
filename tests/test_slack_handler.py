@@ -138,35 +138,25 @@ def test_unexpected_exception_in_fetch_returns_error_reply(say: MagicMock) -> No
 
 
 # ---------------------------------------------------------------------------
-# Service routing — bare mention → summary
+# Service routing
 # ---------------------------------------------------------------------------
 
 
-def test_bare_mention_calls_fetch_for_each_service(say: MagicMock) -> None:
-    with patch(
-        "github_status_bot.slack_handler.fetch_service_status",
-        new_callable=AsyncMock,
-        return_value=_UP_RESPONSE,
-    ) as mock:
-        handle_mention(_event("1000.0001", text="<@U1>"), say)
-
-    assert mock.call_count == 2  # once per service (github + claude)
-    say.assert_called_once()
+def test_bare_mention_defaults_to_github(mock_fetch: AsyncMock, say: MagicMock) -> None:
+    handle_mention(_event("1000.0001", text="<@U1>"), say)
+    assert mock_fetch.call_count == 1
     text = say.call_args.kwargs["text"]
-    assert "*GitHub*" in text
-    assert "*Claude*" in text
-    assert "github_status_bot github" in text
+    assert "GitHub" in text
 
 
-def test_named_service_github_calls_fetch_once(mock_fetch: AsyncMock, say: MagicMock) -> None:
+def test_named_service_github(mock_fetch: AsyncMock, say: MagicMock) -> None:
     handle_mention(_event("1000.0001", text="<@U1> github"), say)
     assert mock_fetch.call_count == 1
     text = say.call_args.kwargs["text"]
     assert "GitHub" in text
-    assert "*Claude*" not in text
 
 
-def test_named_service_claude_calls_fetch_once(say: MagicMock) -> None:
+def test_named_service_claude(say: MagicMock) -> None:
     with patch(
         "github_status_bot.slack_handler.fetch_service_status",
         new_callable=AsyncMock,
@@ -177,19 +167,10 @@ def test_named_service_claude_calls_fetch_once(say: MagicMock) -> None:
     assert mock.call_count == 1
     text = say.call_args.kwargs["text"]
     assert "Claude" in text
-    assert "*GitHub*" not in text
 
 
-def test_unknown_service_keyword_falls_back_to_summary(say: MagicMock) -> None:
-    with patch(
-        "github_status_bot.slack_handler.fetch_service_status",
-        new_callable=AsyncMock,
-        return_value=_UP_RESPONSE,
-    ) as mock:
-        handle_mention(_event("1000.0001", text="<@U1> jenkins"), say)
-
-    # Unknown keyword → treated as bare mention → summary for all services
-    assert mock.call_count == 2
+def test_unknown_service_keyword_defaults_to_github(mock_fetch: AsyncMock, say: MagicMock) -> None:
+    handle_mention(_event("1000.0001", text="<@U1> jenkins"), say)
+    assert mock_fetch.call_count == 1
     text = say.call_args.kwargs["text"]
-    assert "*GitHub*" in text
-    assert "*Claude*" in text
+    assert "GitHub" in text

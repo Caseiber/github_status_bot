@@ -54,19 +54,3 @@ def format_reply(verdict: VerdictResult, service_name: str, status_page_url: str
 
     return "\n".join(lines)
 
-
-def format_summary_line(verdict: VerdictResult, service_name: str) -> str:
-    if verdict.has_fetch_error:
-        return f"*{service_name}*: unknown (couldn't reach status API)"
-    if not verdict.is_down:
-        return f"*{service_name}*: up"
-    severity = _SEVERITY_LABELS.get(verdict.indicator, verdict.indicator.title())
-    parts = [f"*{service_name}*: down — {severity}"]
-    if verdict.duration_seconds is not None:
-        parts.append(_format_duration(verdict.duration_seconds))
-    return ", ".join(parts)
-
-
-def format_summary_reply(lines: list[str], bot_name: str) -> str:
-    hint = f"Tag with a service name for more detail, e.g. `@{bot_name} github`"
-    return "\n".join([*lines, "", hint])

@@ -210,22 +210,20 @@ def test_two_distinct_mentions_both_answered(httpx_mock: HTTPXMock) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bare mention — compact summary for all services
+# Bare mention — defaults to GitHub full reply
 # ---------------------------------------------------------------------------
 
 
-def test_full_pipeline_bare_mention_summary(httpx_mock: HTTPXMock) -> None:
+def test_full_pipeline_bare_mention_defaults_to_github(httpx_mock: HTTPXMock) -> None:
     _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
-    _mock_cl(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
 
     say = MagicMock()
     handle_mention(_bare_event(), say)
 
     say.assert_called_once()
     text = say.call_args.kwargs["text"]
-    assert "*GitHub*" in text
-    assert "*Claude*" in text
-    assert "github_status_bot github" in text
+    assert "*up*" in text
+    assert "GitHub's status page" in text
 
 
 # ---------------------------------------------------------------------------

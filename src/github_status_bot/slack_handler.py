@@ -9,7 +9,7 @@ import re
 import time
 from typing import Any
 
-from github_status_bot.formatter import format_reply, format_summary_line, format_summary_reply
+from github_status_bot.formatter import format_reply
 from github_status_bot.github_status import fetch_service_status
 from github_status_bot.services import SERVICES
 from github_status_bot.verdict import compute_verdict
@@ -43,7 +43,6 @@ def _is_duplicate(event_id: str) -> bool:
 # Service name parsing
 # ---------------------------------------------------------------------------
 
-_BOT_NAME = "github_status_bot"
 _SERVICE_KEYS = set(SERVICES.keys())
 
 # Matches the first word after the @mention token (e.g. "<@U123> github")
@@ -83,18 +82,10 @@ def handle_mention(event: dict[str, Any], say: Any) -> None:
         return
 
     try:
-        if service_key is not None:
-            cfg = SERVICES[service_key]
-            status = asyncio.run(fetch_service_status(cfg.base_url))
-            verdict = compute_verdict(status, cfg.ignored_components)
-            text = format_reply(verdict, cfg.display_name, cfg.status_page_url)
-        else:
-            summary_lines: list[str] = []
-            for key, cfg in SERVICES.items():
-                status = asyncio.run(fetch_service_status(cfg.base_url))
-                verdict = compute_verdict(status, cfg.ignored_components)
-                summary_lines.append(format_summary_line(verdict, cfg.display_name))
-            text = format_summary_reply(summary_lines, _BOT_NAME)
+        cfg = SERVICES[service_key or "github"]
+        status = asyncio.run(fetch_service_status(cfg.base_url))
+        verdict = compute_verdict(status, cfg.ignored_components)
+        text = format_reply(verdict, cfg.display_name, cfg.status_page_url)
     except Exception:
         logger.exception("Unexpected error in handle_mention")
         text = _UNEXPECTED_ERROR_REPLY

@@ -4,12 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from github_status_bot.formatter import (
-    _format_duration,
-    format_reply,
-    format_summary_line,
-    format_summary_reply,
-)
+from github_status_bot.formatter import _format_duration, format_reply
 from github_status_bot.verdict import VerdictResult
 
 _GH_NAME = "GitHub"
@@ -213,51 +208,3 @@ def test_format_reply_uses_service_name_in_fetch_error() -> None:
     assert "Claude's status" in result
 
 
-# ---------------------------------------------------------------------------
-# format_summary_line
-# ---------------------------------------------------------------------------
-
-
-def test_summary_line_up() -> None:
-    line = format_summary_line(_verdict(is_down=False), "GitHub")
-    assert line == "*GitHub*: up"
-
-
-def test_summary_line_down_with_duration() -> None:
-    line = format_summary_line(
-        _verdict(is_down=True, indicator="major", duration_seconds=720), "GitHub"
-    )
-    assert line == "*GitHub*: down — Major Outage, ~12m"
-
-
-def test_summary_line_down_no_duration() -> None:
-    line = format_summary_line(_verdict(is_down=True, indicator="minor"), "GitHub")
-    assert line == "*GitHub*: down — Degraded"
-
-
-def test_summary_line_fetch_error() -> None:
-    line = format_summary_line(_verdict(has_fetch_error=True), "Claude")
-    assert line == "*Claude*: unknown (couldn't reach status API)"
-
-
-def test_summary_line_uses_service_name() -> None:
-    line = format_summary_line(_verdict(is_down=False), "Claude")
-    assert "*Claude*" in line
-
-
-# ---------------------------------------------------------------------------
-# format_summary_reply
-# ---------------------------------------------------------------------------
-
-
-def test_summary_reply_includes_all_lines_and_hint() -> None:
-    lines = ["*GitHub*: up", "*Claude*: up"]
-    result = format_summary_reply(lines, "github_status_bot")
-    assert "*GitHub*: up" in result
-    assert "*Claude*: up" in result
-    assert "@github_status_bot github" in result
-
-
-def test_summary_reply_hint_uses_bot_name() -> None:
-    result = format_summary_reply(["*GitHub*: up"], "my_bot")
-    assert "@my_bot github" in result

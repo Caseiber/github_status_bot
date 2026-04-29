@@ -987,9 +987,6 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 **Acceptance Criteria**:
 
 - [x] `format_reply(verdict, service_name, status_page_url)` — service name and URL are parameters, not hardcoded
-- [x] `format_summary_line(verdict, service_name) -> str` — compact one-line status per service
-- [x] `format_summary_reply(lines, bot_name) -> str` — joins lines + hint: `"Tag with a service name for more detail, e.g. @{bot_name} github"`
-- [x] Summary line format: `*{name}*: up` / `*{name}*: down — {severity}, {duration}` / `*{name}*: unknown (...)`
 - [x] `mypy --strict` passes
 
 **Definition of Done**:
@@ -1011,10 +1008,10 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [x] `@github_status_bot github` → full detail reply for GitHub only
-- [x] `@github_status_bot claude` → full detail reply for Claude only
-- [x] `@github_status_bot` (bare) → compact summary for all services + hint line
-- [x] Unknown service keyword falls back to bare mention (summary) behavior
+- [x] `@github_status_bot github` → full detail reply for GitHub
+- [x] `@github_status_bot claude` → full detail reply for Claude
+- [x] `@github_status_bot` (bare) → full GitHub reply (default service)
+- [x] Unknown service keyword defaults to GitHub
 - [x] Service keyword matching is case-insensitive
 - [x] `_FETCH_ERROR_VERDICT` replaced with `_UNEXPECTED_ERROR_REPLY` string
 - [x] `mypy --strict` passes
@@ -1074,7 +1071,7 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 - [ ] `@github_status_bot github` returns GitHub-specific detail reply in workspace
 - [ ] `@github_status_bot claude` returns Claude-specific detail reply in workspace
 - [ ] `@github_status_bot` (bare mention) returns compact two-line summary + hint
-- [ ] Unknown keyword (e.g. `@github_status_bot foobar`) returns compact summary (fallback behavior)
+- [ ] Unknown keyword (e.g. `@github_status_bot foobar`) defaults to GitHub full reply
 - [ ] Bot restarted with latest code from `feat/phase3-multi-service` branch
 
 **Definition of Done**:
