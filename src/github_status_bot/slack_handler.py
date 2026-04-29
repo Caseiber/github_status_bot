@@ -87,16 +87,17 @@ def handle_mention(event: dict[str, Any], say: Any) -> None:
     channel: str = event.get("channel", "")
     thread_ts: str | None = event.get("thread_ts")  # T017
 
+    raw_text: str = event.get("text", "")
+    service_key = _parse_service(raw_text)
+    logger.info("Received event %s channel=%s service=%r", event_id, channel, service_key)
+
     if _is_duplicate(event_id):
-        logger.debug("Skipping duplicate event %s", event_id)
+        logger.info("Suppressed duplicate event %s", event_id)
         return
 
     if _is_rate_limited(channel):
-        logger.debug("Rate-limited in channel %s", channel)
+        logger.info("Rate-limited in channel %s; ignoring event %s", channel, event_id)
         return
-
-    raw_text: str = event.get("text", "")
-    service_key = _parse_service(raw_text)
 
     try:
         if service_key is not None:
