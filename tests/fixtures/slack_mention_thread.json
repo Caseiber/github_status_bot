@@ -1,0 +1,10 @@
+{
+  "type": "app_mention",
+  "text": "<@U99999BOTID>",
+  "user": "U01234ABCDE",
+  "ts": "1234567890.000200",
+  "channel": "C01234ABCDE",
+  "thread_ts": "1234567890.000100",
+  "event_id": "Ev01THREAD01",
+  "event_time": 1234567890
+}
