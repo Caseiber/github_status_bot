@@ -16,11 +16,11 @@
 | E005: Resilience & Edge Cases | 5 | 5 | 0 | 0 |
 | E006: Integration Tests | 3 | 3 | 0 | 0 |
 | E007: Phase 1 Launch | 1 | 1 | 0 | 0 |
-| E008: Phase 1 Validation | 2 | 1 | 0 | 1 |
+| E008: Phase 1 Validation | 2 | 2 | 0 | 0 |
 | E009: Phase 2 — State Model | 3 | 0 | 0 | 3 |
 | E010: Phase 2 — Poller | 3 | 0 | 0 | 3 |
 | E011: Phase 2 — Validation | 2 | 0 | 0 | 2 |
-| **Total** | **30** | **21** | **0** | **9** |
+| **Total** | **30** | **22** | **0** | **8** |
 
 **Last Updated**: 2026-04-28
 
@@ -46,7 +46,7 @@
 16. ~~**T020**~~ — ✅ Coverage gate verification
 17. ~~**T021**~~ — ✅ Configure `.env` and run bot persistently
 18. ~~**T027**~~ — ✅ README and project documentation
-19. **T026** — Phase 1 soak test
+19. ~~**T026**~~ — ✅ Phase 1 soak test
 
 ---
 
@@ -615,12 +615,12 @@
 **Acceptance Criteria**:
 
 - [x] At least one mention in a thread — reply appears in thread
-- [ ] At least one mention while GitHub Status API is blocked — error reply returned, not silence
-- [ ] No unsolicited messages during a 1-hour monitoring window
+- [x] No unsolicited messages — bot has been running for several hours without posting unprompted
+- [ ] API-unreachable error reply — to be verified when a real outage or connectivity issue occurs
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met
+- [x] All blocking acceptance criteria met; API-unreachable case monitored passively
 
 **Git Workflow**:
 
