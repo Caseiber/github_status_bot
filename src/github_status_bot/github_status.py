@@ -1,4 +1,4 @@
-"""Fetches and parses the GitHub Statuspage API."""
+"""Fetches and parses Statuspage.io-compatible API endpoints."""
 
 from __future__ import annotations
 
@@ -8,10 +8,6 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-
-STATUS_URL = "https://www.githubstatus.com/api/v2/status.json"
-INCIDENTS_URL = "https://www.githubstatus.com/api/v2/incidents/unresolved.json"
-COMPONENTS_URL = "https://www.githubstatus.com/api/v2/components.json"
 
 _TIMEOUT = httpx.Timeout(2.0)
 _RETRYABLE = {500, 502, 503, 504}
@@ -31,7 +27,7 @@ class Component:
 
 
 @dataclass(frozen=True)
-class GitHubStatusResponse:
+class ServiceStatusResponse:
     indicator: str
     incidents: list[Incident]
     components: list[Component]
@@ -110,16 +106,20 @@ async def _fetch_with_retry(client: httpx.AsyncClient, url: str) -> Any:
             raise
 
 
-async def fetch_github_status() -> GitHubStatusResponse:
-    """Concurrently fetch both GitHub Status endpoints and return a parsed response."""
+async def fetch_service_status(base_url: str) -> ServiceStatusResponse:
+    """Concurrently fetch Statuspage.io endpoints for the given base URL."""
+    status_url = f"{base_url}/status.json"
+    incidents_url = f"{base_url}/incidents/unresolved.json"
+    components_url = f"{base_url}/components.json"
+
     async with httpx.AsyncClient() as client:
         try:
             status_data, incidents_data = await asyncio.gather(
-                _fetch_with_retry(client, STATUS_URL),
-                _fetch_with_retry(client, INCIDENTS_URL),
+                _fetch_with_retry(client, status_url),
+                _fetch_with_retry(client, incidents_url),
             )
         except Exception:
-            return GitHubStatusResponse(
+            return ServiceStatusResponse(
                 indicator="unknown",
                 incidents=[],
                 components=[],
@@ -127,12 +127,12 @@ async def fetch_github_status() -> GitHubStatusResponse:
             )
 
         try:
-            components_data = await _fetch_with_retry(client, COMPONENTS_URL)
+            components_data = await _fetch_with_retry(client, components_url)
             components = _parse_components(components_data)
         except Exception:
             components = []
 
-    return GitHubStatusResponse(
+    return ServiceStatusResponse(
         indicator=_parse_status(status_data),
         incidents=_parse_incidents(incidents_data),
         components=components,

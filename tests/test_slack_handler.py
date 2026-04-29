@@ -9,10 +9,10 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 
 import github_status_bot.slack_handler as handler
-from github_status_bot.github_status import GitHubStatusResponse
+from github_status_bot.github_status import ServiceStatusResponse
 from github_status_bot.slack_handler import handle_mention
 
-_UP_RESPONSE = GitHubStatusResponse(
+_UP_RESPONSE = ServiceStatusResponse(
     indicator="none", incidents=[], components=[], fetch_error=False
 )
 
@@ -27,7 +27,7 @@ def say() -> MagicMock:
 @pytest.fixture
 def mock_fetch() -> Iterator[AsyncMock]:
     with patch(
-        "github_status_bot.slack_handler.fetch_github_status",
+        "github_status_bot.slack_handler.fetch_service_status",
         new_callable=AsyncMock,
         return_value=_UP_RESPONSE,
     ) as m:
@@ -37,8 +37,9 @@ def mock_fetch() -> Iterator[AsyncMock]:
 def _event(
     event_id: str = "ev1",
     thread_ts: str | None = None,
+    text: str = "<@U1> github",
 ) -> dict[str, str]:
-    e: dict[str, str] = {"event_id": event_id, "channel": _CHANNEL}
+    e: dict[str, str] = {"event_id": event_id, "channel": _CHANNEL, "text": text}
     if thread_ts is not None:
         e["thread_ts"] = thread_ts
     return e
@@ -151,7 +152,7 @@ def test_cache_at_capacity_evicts_oldest_and_accepts_new(
 
 def test_unexpected_exception_in_fetch_returns_error_reply(say: MagicMock) -> None:
     with patch(
-        "github_status_bot.slack_handler.fetch_github_status",
+        "github_status_bot.slack_handler.fetch_service_status",
         new_callable=AsyncMock,
         side_effect=RuntimeError("unexpected boom"),
     ):
@@ -159,6 +160,64 @@ def test_unexpected_exception_in_fetch_returns_error_reply(say: MagicMock) -> No
 
     say.assert_called_once()
     text = say.call_args.kwargs["text"]
-    assert "couldn't check" in text.lower()
+    assert "something went wrong" in text.lower()
     assert "*up*" not in text
     assert "*down*" not in text
+
+
+# ---------------------------------------------------------------------------
+# Service routing — bare mention → summary
+# ---------------------------------------------------------------------------
+
+
+def test_bare_mention_calls_fetch_for_each_service(say: MagicMock) -> None:
+    with patch(
+        "github_status_bot.slack_handler.fetch_service_status",
+        new_callable=AsyncMock,
+        return_value=_UP_RESPONSE,
+    ) as mock:
+        handle_mention(_event("ev1", text="<@U1>"), say)
+
+    assert mock.call_count == 2  # once per service (github + claude)
+    say.assert_called_once()
+    text = say.call_args.kwargs["text"]
+    assert "*GitHub*" in text
+    assert "*Claude*" in text
+    assert "github_status_bot github" in text
+
+
+def test_named_service_github_calls_fetch_once(mock_fetch: AsyncMock, say: MagicMock) -> None:
+    handle_mention(_event("ev1", text="<@U1> github"), say)
+    assert mock_fetch.call_count == 1
+    text = say.call_args.kwargs["text"]
+    assert "GitHub" in text
+    assert "*Claude*" not in text
+
+
+def test_named_service_claude_calls_fetch_once(say: MagicMock) -> None:
+    with patch(
+        "github_status_bot.slack_handler.fetch_service_status",
+        new_callable=AsyncMock,
+        return_value=_UP_RESPONSE,
+    ) as mock:
+        handle_mention(_event("ev1", text="<@U1> claude"), say)
+
+    assert mock.call_count == 1
+    text = say.call_args.kwargs["text"]
+    assert "Claude" in text
+    assert "*GitHub*" not in text
+
+
+def test_unknown_service_keyword_falls_back_to_summary(say: MagicMock) -> None:
+    with patch(
+        "github_status_bot.slack_handler.fetch_service_status",
+        new_callable=AsyncMock,
+        return_value=_UP_RESPONSE,
+    ) as mock:
+        handle_mention(_event("ev1", text="<@U1> jenkins"), say)
+
+    # Unknown keyword → treated as bare mention → summary for all services
+    assert mock.call_count == 2
+    text = say.call_args.kwargs["text"]
+    assert "*GitHub*" in text
+    assert "*Claude*" in text

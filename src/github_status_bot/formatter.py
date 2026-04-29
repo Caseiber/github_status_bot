@@ -10,8 +10,6 @@ _SEVERITY_LABELS: dict[str, str] = {
     "critical": "Critical Outage",
 }
 
-_SOURCE = "<https://www.githubstatus.com|GitHub's status page>"
-
 
 def _format_duration(seconds: int) -> str:
     if seconds < 60:
@@ -26,17 +24,19 @@ def _format_duration(seconds: int) -> str:
     return f"~{hours}h {remaining_minutes}m"
 
 
-def format_reply(verdict: VerdictResult) -> str:
+def format_reply(verdict: VerdictResult, service_name: str, status_page_url: str) -> str:
+    source = f"<{status_page_url}|{service_name}'s status page>"
+
     if verdict.has_fetch_error:
         return (
-            "Couldn't check GitHub's status right now — the status API didn't respond. "
+            f"Couldn't check {service_name}'s status right now — the status API didn't respond. "
             "Try again in a moment."
         )
 
     if not verdict.is_down:
-        return f"GitHub appears to be *up*... for NOW.\n\nSource: {_SOURCE}"
+        return f"{service_name} appears to be *up*... for NOW.\n\nSource: {source}"
 
-    lines = ["GitHub is *down* because AI DevOps is a blight on our land.", ""]
+    lines = [f"{service_name} is *down* because AI DevOps is a blight on our land.", ""]
 
     if len(verdict.affected_components) == 1:
         lines.append(f"Affected Area: {verdict.affected_components[0]}")
@@ -50,6 +50,23 @@ def format_reply(verdict: VerdictResult) -> str:
     if verdict.duration_seconds is not None:
         lines.append(f"Time Down: {_format_duration(verdict.duration_seconds)}")
 
-    lines.extend(["", f"Source: {_SOURCE}"])
+    lines.extend(["", f"Source: {source}"])
 
     return "\n".join(lines)
+
+
+def format_summary_line(verdict: VerdictResult, service_name: str) -> str:
+    if verdict.has_fetch_error:
+        return f"*{service_name}*: unknown (couldn't reach status API)"
+    if not verdict.is_down:
+        return f"*{service_name}*: up"
+    severity = _SEVERITY_LABELS.get(verdict.indicator, verdict.indicator.title())
+    parts = [f"*{service_name}*: down — {severity}"]
+    if verdict.duration_seconds is not None:
+        parts.append(_format_duration(verdict.duration_seconds))
+    return ", ".join(parts)
+
+
+def format_summary_reply(lines: list[str], bot_name: str) -> str:
+    hint = f"Tag with a service name for more detail, e.g. `@{bot_name} github`"
+    return "\n".join([*lines, "", hint])

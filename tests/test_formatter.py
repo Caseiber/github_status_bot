@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-from github_status_bot.formatter import _format_duration, format_reply
+from github_status_bot.formatter import (
+    _format_duration,
+    format_reply,
+    format_summary_line,
+    format_summary_reply,
+)
 from github_status_bot.verdict import VerdictResult
 
-_SOURCE = "<https://www.githubstatus.com|GitHub's status page>"
+_GH_NAME = "GitHub"
+_GH_URL = "https://www.githubstatus.com"
+_GH_SOURCE = f"<{_GH_URL}|{_GH_NAME}'s status page>"
 
 
 def _verdict(
@@ -54,7 +61,7 @@ def test_format_duration(seconds: int, expected: str) -> None:
 
 
 def test_format_reply_fetch_error() -> None:
-    result = format_reply(_verdict(has_fetch_error=True))
+    result = format_reply(_verdict(has_fetch_error=True), _GH_NAME, _GH_URL)
     assert result == (
         "Couldn't check GitHub's status right now — the status API didn't respond. "
         "Try again in a moment."
@@ -69,8 +76,8 @@ def test_format_reply_fetch_error() -> None:
 
 
 def test_format_reply_up() -> None:
-    result = format_reply(_verdict(is_down=False, indicator="none"))
-    assert result == f"GitHub appears to be *up*... for NOW.\n\nSource: {_SOURCE}"
+    result = format_reply(_verdict(is_down=False, indicator="none"), _GH_NAME, _GH_URL)
+    assert result == f"GitHub appears to be *up*... for NOW.\n\nSource: {_GH_SOURCE}"
 
 
 # ---------------------------------------------------------------------------
@@ -79,19 +86,23 @@ def test_format_reply_up() -> None:
 
 
 def test_format_reply_down_with_duration() -> None:
-    result = format_reply(_verdict(is_down=True, indicator="major", duration_seconds=7920))
+    result = format_reply(
+        _verdict(is_down=True, indicator="major", duration_seconds=7920), _GH_NAME, _GH_URL
+    )
     assert result == (
         "GitHub is *down* because AI DevOps is a blight on our land.\n"
         "\n"
         "Severity: Major Outage\n"
         "Time Down: ~2h 12m\n"
         "\n"
-        f"Source: {_SOURCE}"
+        f"Source: {_GH_SOURCE}"
     )
 
 
 def test_format_reply_down_with_short_duration() -> None:
-    result = format_reply(_verdict(is_down=True, indicator="minor", duration_seconds=45))
+    result = format_reply(
+        _verdict(is_down=True, indicator="minor", duration_seconds=45), _GH_NAME, _GH_URL
+    )
     assert "less than a minute" in result
     assert "*down*" in result
 
@@ -102,19 +113,21 @@ def test_format_reply_down_with_short_duration() -> None:
 
 
 def test_format_reply_down_no_duration() -> None:
-    result = format_reply(_verdict(is_down=True, indicator="major", duration_seconds=None))
+    result = format_reply(
+        _verdict(is_down=True, indicator="major", duration_seconds=None), _GH_NAME, _GH_URL
+    )
     assert result == (
         "GitHub is *down* because AI DevOps is a blight on our land.\n"
         "\n"
         "Severity: Major Outage\n"
         "\n"
-        f"Source: {_SOURCE}"
+        f"Source: {_GH_SOURCE}"
     )
     assert "None" not in result
 
 
 def test_format_reply_down_critical_no_duration() -> None:
-    result = format_reply(_verdict(is_down=True, indicator="critical"))
+    result = format_reply(_verdict(is_down=True, indicator="critical"), _GH_NAME, _GH_URL)
     assert "Critical Outage" in result
     assert "*down*" in result
 
@@ -131,13 +144,15 @@ def test_format_reply_down_with_single_affected_component() -> None:
             indicator="minor",
             duration_seconds=3600,
             affected_components=("Git Operations",),
-        )
+        ),
+        _GH_NAME,
+        _GH_URL,
     )
     assert "Affected Area: Git Operations" in result
     assert "Affected Areas" not in result
     assert "Severity: Degraded" in result
     assert "Time Down: ~1h" in result
-    assert f"Source: {_SOURCE}" in result
+    assert f"Source: {_GH_SOURCE}" in result
 
 
 def test_format_reply_down_with_multiple_affected_components_uses_bullet_list() -> None:
@@ -147,28 +162,102 @@ def test_format_reply_down_with_multiple_affected_components_uses_bullet_list() 
             indicator="major",
             duration_seconds=3600,
             affected_components=("Git Operations", "API Requests"),
-        )
+        ),
+        _GH_NAME,
+        _GH_URL,
     )
     assert "Affected Areas:" in result
     assert "• Git Operations" in result
     assert "• API Requests" in result
     assert "Affected Area:" not in result
     assert "Severity: Major Outage" in result
-    assert f"Source: {_SOURCE}" in result
+    assert f"Source: {_GH_SOURCE}" in result
 
 
 def test_format_reply_down_no_affected_components_omits_area_line() -> None:
-    result = format_reply(_verdict(is_down=True, indicator="major"))
+    result = format_reply(_verdict(is_down=True, indicator="major"), _GH_NAME, _GH_URL)
     assert "Affected Area" not in result
     assert "Severity: Major Outage" in result
-    assert f"Source: {_SOURCE}" in result
+    assert f"Source: {_GH_SOURCE}" in result
 
 
 def test_format_reply_source_link_present_when_up() -> None:
-    result = format_reply(_verdict(is_down=False))
-    assert _SOURCE in result
+    result = format_reply(_verdict(is_down=False), _GH_NAME, _GH_URL)
+    assert _GH_SOURCE in result
 
 
 def test_format_reply_source_link_present_when_down() -> None:
-    result = format_reply(_verdict(is_down=True, indicator="minor"))
-    assert _SOURCE in result
+    result = format_reply(_verdict(is_down=True, indicator="minor"), _GH_NAME, _GH_URL)
+    assert _GH_SOURCE in result
+
+
+# ---------------------------------------------------------------------------
+# format_reply — service name parameterized (Claude)
+# ---------------------------------------------------------------------------
+
+
+def test_format_reply_uses_service_name_in_up_message() -> None:
+    result = format_reply(_verdict(is_down=False), "Claude", "https://status.claude.com")
+    assert "Claude appears to be *up*" in result
+    assert "<https://status.claude.com|Claude's status page>" in result
+
+
+def test_format_reply_uses_service_name_in_down_message() -> None:
+    result = format_reply(_verdict(is_down=True, indicator="major"), "Claude", "https://status.claude.com")
+    assert "Claude is *down*" in result
+    assert "<https://status.claude.com|Claude's status page>" in result
+
+
+def test_format_reply_uses_service_name_in_fetch_error() -> None:
+    result = format_reply(_verdict(has_fetch_error=True), "Claude", "https://status.claude.com")
+    assert "Claude's status" in result
+
+
+# ---------------------------------------------------------------------------
+# format_summary_line
+# ---------------------------------------------------------------------------
+
+
+def test_summary_line_up() -> None:
+    line = format_summary_line(_verdict(is_down=False), "GitHub")
+    assert line == "*GitHub*: up"
+
+
+def test_summary_line_down_with_duration() -> None:
+    line = format_summary_line(
+        _verdict(is_down=True, indicator="major", duration_seconds=720), "GitHub"
+    )
+    assert line == "*GitHub*: down — Major Outage, ~12m"
+
+
+def test_summary_line_down_no_duration() -> None:
+    line = format_summary_line(_verdict(is_down=True, indicator="minor"), "GitHub")
+    assert line == "*GitHub*: down — Degraded"
+
+
+def test_summary_line_fetch_error() -> None:
+    line = format_summary_line(_verdict(has_fetch_error=True), "Claude")
+    assert line == "*Claude*: unknown (couldn't reach status API)"
+
+
+def test_summary_line_uses_service_name() -> None:
+    line = format_summary_line(_verdict(is_down=False), "Claude")
+    assert "*Claude*" in line
+
+
+# ---------------------------------------------------------------------------
+# format_summary_reply
+# ---------------------------------------------------------------------------
+
+
+def test_summary_reply_includes_all_lines_and_hint() -> None:
+    lines = ["*GitHub*: up", "*Claude*: up"]
+    result = format_summary_reply(lines, "github_status_bot")
+    assert "*GitHub*: up" in result
+    assert "*Claude*: up" in result
+    assert "@github_status_bot github" in result
+
+
+def test_summary_reply_hint_uses_bot_name() -> None:
+    result = format_summary_reply(["*GitHub*: up"], "my_bot")
+    assert "@my_bot github" in result

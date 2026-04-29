@@ -1,6 +1,6 @@
 """Integration tests — full event → HTTP fetch → verdict → reply pipeline (T019).
 
-All external HTTP is mocked via pytest-httpx. fetch_github_status() is called for
+All external HTTP is mocked via pytest-httpx. fetch_service_status() is called for
 real so the entire call chain is exercised: handler → fetcher → verdict → formatter.
 """
 
@@ -13,10 +13,19 @@ from unittest.mock import MagicMock
 
 from pytest_httpx import HTTPXMock
 
-from github_status_bot.github_status import COMPONENTS_URL, INCIDENTS_URL, STATUS_URL
 from github_status_bot.slack_handler import handle_mention
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+_GH_BASE = "https://www.githubstatus.com/api/v2"
+_GH_STATUS = f"{_GH_BASE}/status.json"
+_GH_INCIDENTS = f"{_GH_BASE}/incidents/unresolved.json"
+_GH_COMPONENTS = f"{_GH_BASE}/components.json"
+
+_CL_BASE = "https://status.claude.com/api/v2"
+_CL_STATUS = f"{_CL_BASE}/status.json"
+_CL_INCIDENTS = f"{_CL_BASE}/incidents/unresolved.json"
+_CL_COMPONENTS = f"{_CL_BASE}/components.json"
 
 
 def _load(name: str) -> Any:
@@ -35,15 +44,29 @@ def _retry_event() -> dict[str, Any]:
     return _load("slack_mention_retry.json")
 
 
+def _bare_event() -> dict[str, Any]:
+    return _load("slack_mention_bare.json")
+
+
+def _mock_gh(httpx_mock: HTTPXMock, status: str, incidents: str, components: str) -> None:
+    httpx_mock.add_response(url=_GH_STATUS, json=_load(status))
+    httpx_mock.add_response(url=_GH_INCIDENTS, json=_load(incidents))
+    httpx_mock.add_response(url=_GH_COMPONENTS, json=_load(components))
+
+
+def _mock_cl(httpx_mock: HTTPXMock, status: str, incidents: str, components: str) -> None:
+    httpx_mock.add_response(url=_CL_STATUS, json=_load(status))
+    httpx_mock.add_response(url=_CL_INCIDENTS, json=_load(incidents))
+    httpx_mock.add_response(url=_CL_COMPONENTS, json=_load(components))
+
+
 # ---------------------------------------------------------------------------
-# Happy path — GitHub up
+# Happy path — GitHub up (named service)
 # ---------------------------------------------------------------------------
 
 
 def test_full_pipeline_github_up(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url=STATUS_URL, json=_load("status_none.json"))
-    httpx_mock.add_response(url=INCIDENTS_URL, json=_load("unresolved_empty.json"))
-    httpx_mock.add_response(url=COMPONENTS_URL, json=_load("components_all_operational.json"))
+    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
 
     say = MagicMock()
     handle_mention(_channel_event(), say)
@@ -61,9 +84,7 @@ def test_full_pipeline_github_up(httpx_mock: HTTPXMock) -> None:
 
 
 def test_full_pipeline_github_down_with_component(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url=STATUS_URL, json=_load("status_major.json"))
-    httpx_mock.add_response(url=INCIDENTS_URL, json=_load("unresolved_active.json"))
-    httpx_mock.add_response(url=COMPONENTS_URL, json=_load("components_partial_outage.json"))
+    _mock_gh(httpx_mock, "status_major.json", "unresolved_active.json", "components_partial_outage.json")
 
     say = MagicMock()
     handle_mention(_channel_event(), say)
@@ -83,11 +104,7 @@ def test_full_pipeline_github_down_with_component(httpx_mock: HTTPXMock) -> None
 
 
 def test_full_pipeline_down_missing_started_at(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url=STATUS_URL, json=_load("status_minor.json"))
-    httpx_mock.add_response(
-        url=INCIDENTS_URL, json=_load("unresolved_missing_started_at.json")
-    )
-    httpx_mock.add_response(url=COMPONENTS_URL, json=_load("components_all_operational.json"))
+    _mock_gh(httpx_mock, "status_minor.json", "unresolved_missing_started_at.json", "components_all_operational.json")
 
     say = MagicMock()
     handle_mention(_channel_event(), say)
@@ -105,10 +122,10 @@ def test_full_pipeline_down_missing_started_at(httpx_mock: HTTPXMock) -> None:
 
 
 def test_full_pipeline_components_failure_reply_sent(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url=STATUS_URL, json=_load("status_major.json"))
-    httpx_mock.add_response(url=INCIDENTS_URL, json=_load("unresolved_active.json"))
-    httpx_mock.add_response(url=COMPONENTS_URL, status_code=500)
-    httpx_mock.add_response(url=COMPONENTS_URL, status_code=500)  # retry
+    httpx_mock.add_response(url=_GH_STATUS, json=_load("status_major.json"))
+    httpx_mock.add_response(url=_GH_INCIDENTS, json=_load("unresolved_active.json"))
+    httpx_mock.add_response(url=_GH_COMPONENTS, status_code=500)
+    httpx_mock.add_response(url=_GH_COMPONENTS, status_code=500)  # retry
 
     say = MagicMock()
     handle_mention(_channel_event(), say)
@@ -126,9 +143,9 @@ def test_full_pipeline_components_failure_reply_sent(httpx_mock: HTTPXMock) -> N
 
 
 def test_full_pipeline_api_unreachable(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url=STATUS_URL, status_code=500)
-    httpx_mock.add_response(url=STATUS_URL, status_code=500)  # retry
-    httpx_mock.add_response(url=INCIDENTS_URL, json=_load("unresolved_empty.json"))
+    httpx_mock.add_response(url=_GH_STATUS, status_code=500)
+    httpx_mock.add_response(url=_GH_STATUS, status_code=500)  # retry
+    httpx_mock.add_response(url=_GH_INCIDENTS, json=_load("unresolved_empty.json"))
 
     say = MagicMock()
     handle_mention(_channel_event(), say)
@@ -146,9 +163,7 @@ def test_full_pipeline_api_unreachable(httpx_mock: HTTPXMock) -> None:
 
 
 def test_full_pipeline_thread_mention_replies_in_thread(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url=STATUS_URL, json=_load("status_none.json"))
-    httpx_mock.add_response(url=INCIDENTS_URL, json=_load("unresolved_empty.json"))
-    httpx_mock.add_response(url=COMPONENTS_URL, json=_load("components_all_operational.json"))
+    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
 
     say = MagicMock()
     handle_mention(_thread_event(), say)
@@ -163,9 +178,7 @@ def test_full_pipeline_thread_mention_replies_in_thread(httpx_mock: HTTPXMock) -
 
 
 def test_full_pipeline_retry_event_suppressed(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url=STATUS_URL, json=_load("status_none.json"))
-    httpx_mock.add_response(url=INCIDENTS_URL, json=_load("unresolved_empty.json"))
-    httpx_mock.add_response(url=COMPONENTS_URL, json=_load("components_all_operational.json"))
+    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
 
     say = MagicMock()
     original = _channel_event()
@@ -183,9 +196,7 @@ def test_full_pipeline_retry_event_suppressed(httpx_mock: HTTPXMock) -> None:
 
 
 def test_full_pipeline_rate_limit_same_channel(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url=STATUS_URL, json=_load("status_none.json"))
-    httpx_mock.add_response(url=INCIDENTS_URL, json=_load("unresolved_empty.json"))
-    httpx_mock.add_response(url=COMPONENTS_URL, json=_load("components_all_operational.json"))
+    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
 
     say = MagicMock()
     first = _channel_event()
@@ -195,3 +206,41 @@ def test_full_pipeline_rate_limit_same_channel(httpx_mock: HTTPXMock) -> None:
     handle_mention(second, say)  # same channel, within cooldown
 
     assert say.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Bare mention — compact summary for all services
+# ---------------------------------------------------------------------------
+
+
+def test_full_pipeline_bare_mention_summary(httpx_mock: HTTPXMock) -> None:
+    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+    _mock_cl(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+
+    say = MagicMock()
+    handle_mention(_bare_event(), say)
+
+    say.assert_called_once()
+    text = say.call_args.kwargs["text"]
+    assert "*GitHub*" in text
+    assert "*Claude*" in text
+    assert "github_status_bot github" in text
+
+
+# ---------------------------------------------------------------------------
+# Claude named service
+# ---------------------------------------------------------------------------
+
+
+def test_full_pipeline_claude_up(httpx_mock: HTTPXMock) -> None:
+    _mock_cl(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+
+    say = MagicMock()
+    event = {**_channel_event(), "event_id": "Ev01CLAUDE01", "text": "<@U99999BOTID> claude"}
+    handle_mention(event, say)
+
+    say.assert_called_once()
+    text = say.call_args.kwargs["text"]
+    assert "*up*" in text
+    assert "Claude's status page" in text
+    assert "*down*" not in text

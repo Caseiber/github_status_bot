@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 from typing import Any
 
-from github_status_bot.formatter import format_reply
-from github_status_bot.github_status import fetch_github_status
-from github_status_bot.verdict import VerdictResult, compute_verdict
+from github_status_bot.formatter import format_reply, format_summary_line, format_summary_reply
+from github_status_bot.github_status import fetch_service_status
+from github_status_bot.services import SERVICES
+from github_status_bot.verdict import compute_verdict
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +53,28 @@ def _is_rate_limited(channel_id: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Fallback verdict used when an unexpected exception escapes (T013)
+# Service name parsing
 # ---------------------------------------------------------------------------
 
-_FETCH_ERROR_VERDICT = VerdictResult(
-    is_down=False, indicator="unknown", duration_seconds=None, has_fetch_error=True,
-    affected_components=(),
+_BOT_NAME = "github_status_bot"
+_SERVICE_KEYS = set(SERVICES.keys())
+
+# Matches the first word after the @mention token (e.g. "<@U123> github")
+_SERVICE_RE = re.compile(r"<@[^>]+>\s+(\S+)")
+
+_UNEXPECTED_ERROR_REPLY = (
+    "Something went wrong while checking service status. Please try again."
 )
+
+
+def _parse_service(text: str) -> str | None:
+    """Return the service keyword from the mention text, or None for a bare mention."""
+    m = _SERVICE_RE.search(text)
+    if m:
+        token = m.group(1).lower()
+        if token in _SERVICE_KEYS:
+            return token
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -78,13 +95,25 @@ def handle_mention(event: dict[str, Any], say: Any) -> None:
         logger.debug("Rate-limited in channel %s", channel)
         return
 
+    raw_text: str = event.get("text", "")
+    service_key = _parse_service(raw_text)
+
     try:
-        status = asyncio.run(fetch_github_status())
-        verdict = compute_verdict(status)
-        text = format_reply(verdict)
+        if service_key is not None:
+            cfg = SERVICES[service_key]
+            status = asyncio.run(fetch_service_status(cfg.base_url))
+            verdict = compute_verdict(status, cfg.ignored_components)
+            text = format_reply(verdict, cfg.display_name, cfg.status_page_url)
+        else:
+            summary_lines: list[str] = []
+            for key, cfg in SERVICES.items():
+                status = asyncio.run(fetch_service_status(cfg.base_url))
+                verdict = compute_verdict(status, cfg.ignored_components)
+                summary_lines.append(format_summary_line(verdict, cfg.display_name))
+            text = format_summary_reply(summary_lines, _BOT_NAME)
     except Exception:
         logger.exception("Unexpected error in handle_mention")
-        text = format_reply(_FETCH_ERROR_VERDICT)
+        text = _UNEXPECTED_ERROR_REPLY
 
     kwargs: dict[str, Any] = {"text": text}
     if thread_ts:

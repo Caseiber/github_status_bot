@@ -5,11 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from github_status_bot.github_status import GitHubStatusResponse, Incident
+from github_status_bot.github_status import Incident, ServiceStatusResponse
 
 _DOWN_INDICATORS = {"minor", "major", "critical"}
 _NON_OPERATIONAL_STATUSES = {"degraded_performance", "partial_outage", "major_outage"}
-_IGNORED_COMPONENTS = {"Pages", "Webhooks", "Codespaces", "Copilot AI Model Providers"}
 
 
 @dataclass(frozen=True)
@@ -30,7 +29,10 @@ def _earliest_started_at(incidents: list[Incident]) -> datetime | None:
     return min(timestamps) if timestamps else None
 
 
-def compute_verdict(status_response: GitHubStatusResponse) -> VerdictResult:
+def compute_verdict(
+    status_response: ServiceStatusResponse,
+    ignored_components: frozenset[str] = frozenset(),
+) -> VerdictResult:
     if status_response.fetch_error:
         return VerdictResult(
             is_down=False,
@@ -51,7 +53,7 @@ def compute_verdict(status_response: GitHubStatusResponse) -> VerdictResult:
 
     affected_components = tuple(
         c.name for c in status_response.components
-        if c.status in _NON_OPERATIONAL_STATUSES and c.name not in _IGNORED_COMPONENTS
+        if c.status in _NON_OPERATIONAL_STATUSES and c.name not in ignored_components
     )
 
     return VerdictResult(
