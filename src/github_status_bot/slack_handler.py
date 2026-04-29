@@ -70,16 +70,16 @@ def _parse_service(text: str) -> str | None:
 
 
 def handle_mention(event: dict[str, Any], say: Any) -> None:
-    event_id: str = event.get("event_id", "")
+    event_id: str = event.get("ts", "")  # ts is unique per message and stable on Slack retries
     channel: str = event.get("channel", "")
     thread_ts: str | None = event.get("thread_ts")  # T017
 
     raw_text: str = event.get("text", "")
     service_key = _parse_service(raw_text)
-    logger.info("Received event %s channel=%s service=%r", event_id, channel, service_key)
+    logger.info("Received event ts=%s channel=%s service=%r", event_id, channel, service_key)
 
     if _is_duplicate(event_id):
-        logger.info("Suppressed duplicate event %s", event_id)
+        logger.info("Suppressed duplicate event ts=%s", event_id)
         return
 
     try:

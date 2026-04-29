@@ -201,7 +201,7 @@ def test_two_distinct_mentions_both_answered(httpx_mock: HTTPXMock) -> None:
 
     say = MagicMock()
     first = _channel_event()
-    second = {**_channel_event(), "event_id": "Ev01CHANNEL2"}
+    second = {**_channel_event(), "ts": "1234567890.000200"}
 
     handle_mention(first, say)
     handle_mention(second, say)

@@ -35,11 +35,11 @@ def mock_fetch() -> Iterator[AsyncMock]:
 
 
 def _event(
-    event_id: str = "ev1",
+    ts: str = "1000.0001",
     thread_ts: str | None = None,
     text: str = "<@U1> github",
 ) -> dict[str, str]:
-    e: dict[str, str] = {"event_id": event_id, "channel": _CHANNEL, "text": text}
+    e: dict[str, str] = {"ts": ts, "channel": _CHANNEL, "text": text}
     if thread_ts is not None:
         e["thread_ts"] = thread_ts
     return e
@@ -53,14 +53,14 @@ def _event(
 def test_duplicate_event_id_posts_only_once(
     mock_fetch: AsyncMock, say: MagicMock
 ) -> None:
-    handle_mention(_event("ev1"), say)
-    handle_mention(_event("ev1"), say)
+    handle_mention(_event("1000.0001"), say)
+    handle_mention(_event("1000.0001"), say)
     assert say.call_count == 1
 
 
 def test_distinct_event_ids_each_post(mock_fetch: AsyncMock, say: MagicMock) -> None:
-    handle_mention(_event("ev1"), say)
-    handle_mention(_event("ev2"), say)
+    handle_mention(_event("1000.0001"), say)
+    handle_mention(_event("1000.0002"), say)
     assert say.call_count == 2
 
 
@@ -69,9 +69,9 @@ def test_seen_event_id_expires_after_ttl(
 ) -> None:
     with patch("time.monotonic") as mock_time:
         mock_time.return_value = 0.0
-        handle_mention(_event("ev1"), say)
+        handle_mention(_event("1000.0001"), say)
         mock_time.return_value = handler._SEEN_TTL + 1.0
-        handle_mention(_event("ev1"), say)
+        handle_mention(_event("1000.0001"), say)
     assert say.call_count == 2
 
 
@@ -83,14 +83,14 @@ def test_seen_event_id_expires_after_ttl(
 def test_thread_mention_replies_in_thread(
     mock_fetch: AsyncMock, say: MagicMock
 ) -> None:
-    handle_mention(_event("ev1", thread_ts="123.456"), say)
+    handle_mention(_event("1000.0001", thread_ts="123.456"), say)
     say.assert_called_once_with(text=ANY, thread_ts="123.456")
 
 
 def test_channel_root_mention_has_no_thread_ts(
     mock_fetch: AsyncMock, say: MagicMock
 ) -> None:
-    handle_mention(_event("ev1"), say)
+    handle_mention(_event("1000.0001"), say)
     assert "thread_ts" not in say.call_args.kwargs
 
 
@@ -109,9 +109,9 @@ def test_cache_at_capacity_evicts_oldest_and_accepts_new(
 
     with patch("time.monotonic") as mock_time:
         mock_time.return_value = now + 1.0
-        handle_mention(_event("ev_fill"), say)  # fills to capacity
+        handle_mention(_event("1000.0010"), say)  # fills to capacity
         mock_time.return_value = now + 2.0
-        handle_mention(_event("ev_over"), say)  # triggers eviction
+        handle_mention(_event("1000.0011"), say)  # triggers eviction
 
     assert say.call_count == 2
     assert len(handler._seen_events) == handler._SEEN_CAPACITY
@@ -128,7 +128,7 @@ def test_unexpected_exception_in_fetch_returns_error_reply(say: MagicMock) -> No
         new_callable=AsyncMock,
         side_effect=RuntimeError("unexpected boom"),
     ):
-        handle_mention(_event("ev_err"), say)
+        handle_mention(_event("1000.0020"), say)
 
     say.assert_called_once()
     text = say.call_args.kwargs["text"]
@@ -148,7 +148,7 @@ def test_bare_mention_calls_fetch_for_each_service(say: MagicMock) -> None:
         new_callable=AsyncMock,
         return_value=_UP_RESPONSE,
     ) as mock:
-        handle_mention(_event("ev1", text="<@U1>"), say)
+        handle_mention(_event("1000.0001", text="<@U1>"), say)
 
     assert mock.call_count == 2  # once per service (github + claude)
     say.assert_called_once()
@@ -159,7 +159,7 @@ def test_bare_mention_calls_fetch_for_each_service(say: MagicMock) -> None:
 
 
 def test_named_service_github_calls_fetch_once(mock_fetch: AsyncMock, say: MagicMock) -> None:
-    handle_mention(_event("ev1", text="<@U1> github"), say)
+    handle_mention(_event("1000.0001", text="<@U1> github"), say)
     assert mock_fetch.call_count == 1
     text = say.call_args.kwargs["text"]
     assert "GitHub" in text
@@ -172,7 +172,7 @@ def test_named_service_claude_calls_fetch_once(say: MagicMock) -> None:
         new_callable=AsyncMock,
         return_value=_UP_RESPONSE,
     ) as mock:
-        handle_mention(_event("ev1", text="<@U1> claude"), say)
+        handle_mention(_event("1000.0001", text="<@U1> claude"), say)
 
     assert mock.call_count == 1
     text = say.call_args.kwargs["text"]
@@ -186,7 +186,7 @@ def test_unknown_service_keyword_falls_back_to_summary(say: MagicMock) -> None:
         new_callable=AsyncMock,
         return_value=_UP_RESPONSE,
     ) as mock:
-        handle_mention(_event("ev1", text="<@U1> jenkins"), say)
+        handle_mention(_event("1000.0001", text="<@U1> jenkins"), say)
 
     # Unknown keyword → treated as bare mention → summary for all services
     assert mock.call_count == 2
