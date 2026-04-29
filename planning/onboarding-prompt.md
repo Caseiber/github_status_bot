@@ -78,7 +78,7 @@ and posts to `ALERT_CHANNEL_ID` when any service transitions between up and down
 | Hosting             | Long-running local process  | `uv run python -m github_status_bot.slack_handler`  |
 | Secrets             | `.env` file on host machine | Never committed; `.env.example` documents variables |
 | Observability       | Python `logging` to stdout  | Redirect to file as needed                          |
-| Phase 2 persistence | JSON file on disk           | Atomic write; path via `STATE_FILE_PATH` env var    |
+| Phase 2 persistence | JSON file on disk           | `{service: {indicator}}` — atomic write; `STATE_FILE_PATH` env var |
 
 ---
 
@@ -98,16 +98,23 @@ Slack mention
 
 **No database. No inbound HTTP. No cloud infrastructure. Stateless except for the idempotency cache.**
 
-### Phase 2 (additive — same process)
+### Phase 2 (separate cron job — independent of the Slack bot process)
 
 ```
-asyncio.create_task(run_poller(app))  ← started alongside socket-mode handler
-    every POLL_INTERVAL_MINUTES:
-        1. Fetch all services
-        2. Read state file from disk (keyed by service name)
-        3. If any service transitioned → post alert/recovery to ALERT_CHANNEL_ID → write new state
-        4. If unchanged → no-op
+cron: */5 * * * * python -m github_status_bot.poller
+    on each invocation:
+        1. Fetch all services concurrently
+        2. Read stored indicator per service from state file on disk
+        3. For each service: if indicator changed → post alert/recovery to ALERT_CHANNEL_ID → write new indicator
+        4. If indicator unchanged → no-op (no matter how long the current state has persisted)
+        5. Write updated state file
 ```
+
+**Key rule**: the alert gate is `current_indicator != stored_indicator`. A service degraded for 20 hours posts exactly one alert — not one per poll. The bot still answers `@`-mentions on demand regardless of poller state.
+
+**Two independent processes**:
+- `slack_handler.py` — always-on tmux session, handles mentions
+- `poller.py` — cron job, handles proactive alerts; neither knows about the other
 
 ---
 

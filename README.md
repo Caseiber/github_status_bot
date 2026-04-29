@@ -16,6 +16,19 @@ Source: GitHub's status page
 
 ---
 
+## How it works
+
+There are two independent processes:
+
+| Process | How it runs | What it does |
+|---|---|---|
+| **Slack bot** (`slack_handler.py`) | Always-on tmux session | Responds to `@github_status_bot` mentions in real time |
+| **Status poller** (`poller.py`) | Cron job (every 5 min) | Checks all service statuses and posts to an alert channel when the severity level changes |
+
+The poller only posts when something **changes** — if GitHub has been degraded for 20 hours, you get one alert, not one per poll. It posts again only if the severity escalates, de-escalates, or the service recovers.
+
+---
+
 ## Prerequisites
 
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)** — Python package manager
@@ -72,6 +85,37 @@ tmux kill-session -t github-bot
 tmux kill-session -t github-bot
 tmux new-session -d -s github-bot 'uv run python -m github_status_bot.slack_handler'
 ```
+
+---
+
+## Setting up proactive alerts (Phase 2)
+
+The status poller runs as a separate cron job. It posts to a designated Slack channel whenever a service's severity level changes.
+
+**1. Add the Phase 2 variables to `.env`**
+
+```bash
+ALERT_CHANNEL_ID=C0123456789      # Slack channel ID for alerts (right-click channel → Copy link → last segment)
+STATE_FILE_PATH=/path/to/gh_status_state.json  # optional; defaults to gh_status_state.json in the working directory
+```
+
+**2. Add a crontab entry**
+
+Run `crontab -e` and add:
+
+```
+*/5 * * * * cd /path/to/github_status_bot && /path/to/.venv/bin/python -m github_status_bot.poller >> /path/to/poller.log 2>&1
+```
+
+Replace the paths with the actual repo and venv locations on your machine. The `cd` ensures the `.env` file is found and the state file is written in the right place (or set `STATE_FILE_PATH` to an absolute path to avoid this).
+
+**Test it manually first:**
+
+```bash
+uv run python -m github_status_bot.poller
+```
+
+On first run with services up, no alert is posted and the state file is created. To verify an alert would fire, you can temporarily edit the state file to change an indicator and run the poller again.
 
 ---
 

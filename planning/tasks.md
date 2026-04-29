@@ -1,7 +1,7 @@
 # github_status_bot — Development Tasks
 
 **Generated from**: `planning/prd.md` on 2026-04-27
-**Development Phase**: Phase 1 MVP complete → Phase 3 (out-of-order) in progress → Phase 2 Proactive Alerting pending
+**Development Phase**: Phase 1 complete · Phase 3 complete · Phase 2 implementation complete — pending live validation
 
 ---
 
@@ -17,13 +17,13 @@
 | E006: Integration Tests | 3 | 3 | 0 | 0 |
 | E007: Phase 1 Launch | 1 | 1 | 0 | 0 |
 | E008: Phase 1 Validation | 2 | 2 | 0 | 0 |
-| E009: Phase 2 — State Model | 3 | 0 | 0 | 3 |
-| E010: Phase 2 — Poller | 3 | 0 | 0 | 3 |
+| E009: Phase 2 — State Model | 3 | 3 | 0 | 0 |
+| E010: Phase 2 — Poller | 3 | 3 | 0 | 0 |
 | E011: Phase 2 — Validation | 2 | 0 | 0 | 2 |
 | E012: Phase 3 — Service Abstraction | 3 | 3 | 0 | 0 |
 | E013: Phase 3 — Handler Routing | 2 | 2 | 0 | 0 |
 | E014: Phase 3 — Validation | 1 | 1 | 0 | 0 |
-| **Total** | **35** | **28** | **0** | **7** |
+| **Total** | **35** | **33** | **0** | **2** |
 
 **Last Updated**: 2026-04-28
 
@@ -31,10 +31,10 @@
 
 ## Next Priority Tasks
 
-Phase 1 and Phase 3 core implementation are complete. Next up:
+Phase 1, Phase 3, and Phase 2 implementation are complete. Remaining:
 
-1. **T044** — Phase 3 live validation (manual test in workspace with Claude + GitHub)
-2. **T028–T033** — Phase 2 proactive alerting (do not begin until Phase 1 stable ≥ 2 weeks)
+1. **T036** — Phase 2 live validation (set up cron job, confirm alerts fire and de-duplicate correctly)
+2. **T037** — README for Phase 2 ✅ done (merged into this branch)
 
 ### Completed
 1. ~~**T001**~~ — ✅ Initialize Python project with `uv` and `src/` layout
@@ -62,6 +62,13 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 23. ~~**T041**~~ — ✅ Update formatter for multi-service output
 24. ~~**T042**~~ — ✅ Update handler for named-service routing + bare mention summary
 25. ~~**T043**~~ — ✅ Update all tests for Phase 3 (99 tests, 100% coverage)
+26. ~~**T028**~~ — ✅ JSON file state store (`state.py`)
+27. ~~**T029**~~ — ✅ State-transition module (`transition.py`)
+28. ~~**T030**~~ — ✅ Unit tests for transition module (100% coverage)
+29. ~~**T031**~~ — ✅ Cron-invoked poller (`poller.py`)
+30. ~~**T032**~~ — ✅ Recovery alert formatting (`format_recovery_alert`)
+31. ~~**T033**~~ — ✅ Poller tests (100% coverage)
+32. ~~**T037**~~ — ✅ README updated for Phase 2
 
 ---
 
@@ -671,21 +678,24 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 **Dependencies**: None (can be designed before Phase 1 completes)
 **PRD Reference**: P4
 
+**State schema**: `{<service_name>: {"indicator": "<str>"}, ...}` — the stored `indicator` is the sole deduplication key. No timestamps needed.
+
 **Acceptance Criteria**:
 
-- [ ] `state.py` module with `read_state() -> StoredState | None` and `write_state(state: StoredState) -> None`
-- [ ] State file path configurable via `STATE_FILE_PATH` env var (default: `gh_status_state.json`)
-- [ ] File written atomically (write to `.tmp`, then rename) to avoid corrupt reads
-- [ ] `read_state()` returns `None` if file missing or JSON invalid (does not raise)
-- [ ] `mypy --strict` passes
+- [x] `state.py` module with `read_state() -> dict[str, str] | None` and `write_state(state: dict[str, str]) -> None`
+  - The dict maps service name → last-alerted `indicator` value (e.g. `{"github": "minor", "claude": "none"}`)
+- [x] State file path configurable via `STATE_FILE_PATH` env var (default: `gh_status_state.json`)
+- [x] File written atomically (write to `.tmp`, then rename) to avoid corrupt reads
+- [x] `read_state()` returns `None` if file missing or JSON invalid (does not raise)
+- [x] `mypy --strict` passes
 
 **Testing Requirements**:
 
-- [ ] Unit tests: read missing file → `None`; read valid file → `StoredState`; write then read → round-trips correctly; corrupt file → `None`
+- [x] Unit tests: read missing file → `None`; read valid file → correct dict; write then read → round-trips correctly; corrupt file → `None`
 
 **Definition of Done**:
 
-- [ ] Module implemented; unit tests passing; 100% coverage
+- [x] Module implemented; unit tests passing; 100% coverage
 
 **Git Workflow**:
 
@@ -702,16 +712,18 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [ ] `compute_transition(current_verdict: VerdictResult, stored_state: StoredState | None) -> Transition` pure function
-- [ ] `Transition`: `UP_TO_DOWN | DOWN_TO_UP | NO_CHANGE`
-- [ ] `UP_TO_DOWN` when prior state was up (or no state) and current is down
-- [ ] `DOWN_TO_UP` when prior state was down and current is up
-- [ ] `NO_CHANGE` otherwise
-- [ ] `mypy --strict` passes
+- [x] `compute_transition(current_indicator: str, stored_indicator: str | None) -> Transition` pure function
+  - Takes the live `indicator` string and the last-alerted `indicator` (or `None` if no prior state)
+- [x] `Transition`: `CHANGED | NO_CHANGE`
+- [x] `CHANGED` when `stored_indicator` is `None` and `current_indicator != "none"` (first poll, service is already down)
+- [x] `CHANGED` when `stored_indicator` is not `None` and `current_indicator != stored_indicator` (any indicator change — escalation, de-escalation, or recovery)
+- [x] `NO_CHANGE` when `stored_indicator` is `None` and `current_indicator == "none"` (first poll, service is up — no alert)
+- [x] `NO_CHANGE` when `current_indicator == stored_indicator` (same level persists — no alert regardless of duration)
+- [x] `mypy --strict` passes
 
 **Definition of Done**:
 
-- [ ] Module implemented; 100% coverage verified in T030
+- [x] Module implemented; 100% coverage verified in T030
 
 **Git Workflow**:
 
@@ -728,16 +740,19 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [ ] Test: no stored state + down current → `UP_TO_DOWN`
-- [ ] Test: stored=up + down current → `UP_TO_DOWN`
-- [ ] Test: stored=down + up current → `DOWN_TO_UP`
-- [ ] Test: stored=down + still down → `NO_CHANGE`
-- [ ] Test: stored=up + still up → `NO_CHANGE`
-- [ ] Coverage on state-transition module = 100%
+- [x] Test: no stored state + `"none"` → `NO_CHANGE` (first poll, service up — no alert)
+- [x] Test: no stored state + `"minor"` → `CHANGED` (first poll, service already degraded)
+- [x] Test: stored=`"none"` + current=`"minor"` → `CHANGED` (went degraded)
+- [x] Test: stored=`"minor"` + current=`"major"` → `CHANGED` (escalated)
+- [x] Test: stored=`"major"` + current=`"minor"` → `CHANGED` (de-escalated)
+- [x] Test: stored=`"minor"` + current=`"none"` → `CHANGED` (recovered)
+- [x] Test: stored=`"minor"` + current=`"minor"` → `NO_CHANGE` (same level, even after 20 hours)
+- [x] Test: stored=`"none"` + current=`"none"` → `NO_CHANGE`
+- [x] Coverage on state-transition module = 100%
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met
+- [x] All acceptance criteria met
 
 **Git Workflow**:
 
@@ -752,7 +767,7 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 ---
 
-#### Task T031: Implement `poller.py` as an asyncio background task
+#### Task T031: Implement `poller.py` as a cron-invoked script
 
 **Priority**: Medium
 **Effort**: 2 hours
@@ -761,19 +776,20 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [ ] `async def run_poller(app: App) -> None` — infinite loop with `asyncio.sleep(POLL_INTERVAL_MINUTES * 60)`
-- [ ] On each iteration: fetch status, read state, compute transition, act, write state
-- [ ] On `UP_TO_DOWN`: post outage alert to `ALERT_CHANNEL_ID`, write new state
-- [ ] On `DOWN_TO_UP`: post recovery alert to `ALERT_CHANNEL_ID`, write new state
-- [ ] On `NO_CHANGE`: no-op
-- [ ] On state file read failure: log error, skip alert (do not crash)
-- [ ] On state file write failure after posting: log warning
-- [ ] Started as `asyncio.create_task(run_poller(app))` from the `__main__` block alongside the socket-mode handler
-- [ ] `mypy --strict` passes
+- [x] `async def poll_once(client: WebClient, channel: str) -> None` — fetches all services, checks state, posts if changed, writes state
+- [x] On `CHANGED` with new `indicator == "none"`: post recovery alert to `ALERT_CHANNEL_ID`, write new indicator to state
+- [x] On `CHANGED` with new `indicator != "none"`: post severity alert to `ALERT_CHANNEL_ID`, write new indicator to state
+- [x] On `NO_CHANGE`: no-op (regardless of how long the current indicator has persisted)
+- [x] On state file read failure: log warning, treat as no prior state (do not crash)
+- [x] On state file write failure: log warning (do not crash)
+- [x] On Slack post failure: log warning (do not crash)
+- [x] `__main__` block: loads `.env`, creates `WebClient`, calls `asyncio.run(poll_once(...))`
+- [x] Intended to be invoked via cron: `*/5 * * * * python -m github_status_bot.poller`
+- [x] `mypy --strict` passes
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met
+- [x] All acceptance criteria met
 
 **Git Workflow**:
 
@@ -790,14 +806,13 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [ ] `format_outage_alert(verdict: VerdictResult) -> str` — mirrors on-demand down reply format
-- [ ] `format_recovery_alert() -> str` — e.g., `"GitHub is back up. Source: GitHub's official status page (all systems operational)."`
-- [ ] Both functions covered by unit tests
-- [ ] Outage alert includes duration when available; omits when not
+- [x] `format_recovery_alert(service_name, status_page_url) -> str` — `"{service} is back *up*.\n\nSource: <url|...>"`
+- [x] Outage alerts reuse existing `format_reply(verdict, service_name, status_page_url)` — no separate function needed
+- [x] `format_recovery_alert` covered by unit tests
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met; unit tests passing
+- [x] All acceptance criteria met; unit tests passing
 
 **Git Workflow**:
 
@@ -814,16 +829,21 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [ ] All HTTP calls mocked with `pytest-httpx`; state file mocked via `tmp_path` fixture
-- [ ] Test: no prior state + GitHub down → alert posted + state file written
-- [ ] Test: stored=down + GitHub still down → no alert, no file write
-- [ ] Test: stored=down + GitHub now up → recovery posted + state file written
-- [ ] Test: stored=up + GitHub still up → no alert
-- [ ] Test: state file corrupt → no alert, handler exits cleanly
+- [x] `fetch_service_status` patched; `WebClient` mocked; state file via `tmp_path` + `monkeypatch`
+- [x] Test: no prior state + indicator=`"none"` → no alert
+- [x] Test: no prior state + indicator=`"minor"` → severity alert posted + state file written
+- [x] Test: stored=`"minor"` + indicator=`"minor"` → no alert (same level persists)
+- [x] Test: stored=`"minor"` + indicator=`"major"` → severity alert posted + state file updated
+- [x] Test: stored=`"major"` + indicator=`"none"` → recovery alert posted + state file updated
+- [x] Test: state file corrupt → no alert, poller continues cleanly
+- [x] Test: fetch raises unexpected exception → no crash
+- [x] Test: Slack post fails → no crash, state file still written
+- [x] Test: state file write fails → no crash
+- [x] Test: only changed service posts alert (per-service independence)
 
 **Definition of Done**:
 
-- [ ] All acceptance criteria met; no live network or Slack calls
+- [x] All acceptance criteria met; no live network or Slack calls
 
 **Git Workflow**:
 
@@ -872,14 +892,14 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [ ] README documents `POLL_INTERVAL_MINUTES` (purpose, default, valid range)
-- [ ] README documents `ALERT_CHANNEL_ID` (how to find the channel ID in Slack)
-- [ ] README documents `STATE_FILE_PATH` (purpose, default)
-- [ ] `.env.example` updated with Phase 2 variables
+- [x] README documents cron setup and `ALERT_CHANNEL_ID` (how to find the channel ID in Slack)
+- [x] README documents `STATE_FILE_PATH` (purpose, default, absolute path recommendation for cron)
+- [x] README documents manual test procedure for the poller
+- [x] `.env.example` updated with Phase 2 variables
 
 **Definition of Done**:
 
-- [ ] README committed; Phase 2 fully documented
+- [x] README committed; Phase 2 fully documented
 
 **Git Workflow**:
 

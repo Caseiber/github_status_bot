@@ -80,18 +80,20 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - The poller fetches the same two GitHub Status endpoints as Phase 1.
 - *Acceptance*: Changing `POLL_INTERVAL_MINUTES` and redeploying changes the polling frequency. Poller runs independently of any user mention.
 
-**P2 — Outage alert**
-- When the poller detects a status transition from "up" to "down," it posts a message to a designated alert channel (configured via `ALERT_CHANNEL_ID` environment variable).
+**P2 — Severity-change alert**
+- When the poller detects that the `indicator` value has changed from the last stored value, it posts a message to a designated alert channel (configured via `ALERT_CHANNEL_ID` environment variable).
+- This fires on any indicator transition: `none` → `minor`, `minor` → `major`, `major` → `critical`, etc. A service that was `minor` (degraded) and escalates to `major` (down) produces a new alert.
 - Alert message format mirrors the on-demand reply: verdict, indicator, duration since `started_at`.
-- *Acceptance*: Within one polling interval of GitHub reporting an outage, a message appears in the configured alert channel.
+- *Acceptance*: Within one polling interval of GitHub's indicator changing, a message appears in the configured alert channel.
 
 **P3 — Recovery alert**
-- When the poller detects a transition from "down" back to "up" (indicator returns to `none` and incidents list is empty or all resolved), it posts a recovery message to the same alert channel.
+- When the poller detects a transition back to `indicator: none` (and incidents list is empty or all resolved), it posts a recovery message to the same alert channel.
 - *Acceptance*: Within one polling interval of GitHub resolving an incident, a recovery message appears in the alert channel.
 
 **P4 — No duplicate alerts**
-- The poller persists the last-known status in DynamoDB (single record). It only posts if the status has changed since the last poll. Repeated "down" polls do not produce repeated alerts.
-- *Acceptance*: 10 consecutive polls during an ongoing outage produce exactly 1 alert message, not 10.
+- The poller persists the last-known `indicator` value in a JSON file on disk (keyed by service name). It only posts if the `indicator` has changed since the last poll. Repeated polls with the same indicator produce no additional alerts.
+- A service that has been `minor` for 20 hours produces exactly 1 alert — not one per poll.
+- *Acceptance*: 10 consecutive polls with the same indicator produce exactly 1 alert message, not 10.
 
 **P5 — Alert channel configuration**
 - `ALERT_CHANNEL_ID` is set at deploy time. No runtime configuration command required in Phase 2.
@@ -136,10 +138,10 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - **Slack framework**: `slack-bolt` (Python) in socket mode — the bot connects outbound to Slack's WebSocket API; no inbound HTTP server or public URL required.
 - **HTTP**: `httpx` (async, timeouts, retries) for all status API calls.
 - **Hosting (Phase 1)**: Long-running process on a team-managed machine. Started via `uv run python -m github_status_bot.slack_handler`. No cloud infrastructure required.
-- **Hosting (Phase 2 addition)**: Background `asyncio` task running in the same process as Phase 1. No additional infrastructure.
+- **Hosting (Phase 2 addition)**: Standalone cron job (`python -m github_status_bot.poller`) running on the same machine as Phase 1. No additional infrastructure. The Slack bot process and the poller are fully independent.
 - **Hosting (Phase 3)**: No new infrastructure. Service registry and fetcher abstraction live in the same process; Phase 3 extends the existing fetcher module.
 - **Secrets**: `.env` file on the host machine (never committed to git). Variables: `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_SIGNING_SECRET`.
-- **Phase 2 persistence**: JSON file on disk for polling state — `{<service_name>: {indicator: <str>, last_alerted_at: <unix>}, ...}` (keyed by service name from Phase 3 onward).
+- **Phase 2 persistence**: JSON file on disk for polling state — `{<service_name>: {"indicator": "<str>"}, ...}` (keyed by service name). The stored `indicator` is compared against the live value; a change triggers an alert.
 - **Observability**: Python `logging` to stdout; redirect to a log file as needed via shell redirection.
 
 ### Integration Strategy
@@ -152,10 +154,10 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 
 **Phase 2 — Poller (additive, runs in same process as Phase 1):**
 - Background `asyncio` task, sleeping `POLL_INTERVAL_MINUTES` between polls.
-  1. Fetch both GitHub Status endpoints.
-  2. Read current state from JSON file on disk.
-  3. If status changed → post alert or recovery to `ALERT_CHANNEL_ID` → write new state to file.
-  4. If status unchanged → no-op.
+  1. Fetch all service status endpoints.
+  2. Read stored `indicator` from JSON file on disk (keyed by service name).
+  3. If `indicator` has changed → post alert or recovery to `ALERT_CHANNEL_ID` → write new `indicator` to file.
+  4. If `indicator` unchanged → no-op (no matter how long the current state has persisted).
 
 ### API Design
 - **Inbound (Phase 1)**: `app_mention` events received over Slack's WebSocket (socket mode). No inbound HTTP endpoint required.
@@ -168,7 +170,7 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
   - `GET https://status.claude.com/api/v2/status.json`
   - `GET https://status.claude.com/api/v2/incidents/unresolved.json`
   - Any additional service endpoints configured via environment variables
-- **Persistence (Phase 2+)**: JSON file on disk — `{<service_name>: {indicator: <str>, last_alerted_at: <unix>}, ...}`.
+- **Persistence (Phase 2+)**: JSON file on disk — `{<service_name>: {"indicator": "<str>"}, ...}`.
 
 ### Security & Performance Requirements
 - **Authentication**: socket mode uses an app-level token (`xapp-...`) to authenticate the WebSocket connection. Slack initiates no inbound HTTP, so there is no per-request signature to verify.
@@ -216,12 +218,12 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
   - *AC*: Verdict-function unit tests assert source-attribution invariant.
 
 ### Epic D — Proactive outage notification (Phase 2)
-- **D1.** As a team member, I receive an alert in `#<alert-channel>` when GitHub goes down, without having to ask.
-  - *AC*: P1, P2 satisfied; alert posted within one polling interval of status change.
+- **D1.** As a team member, I receive an alert in `#<alert-channel>` when GitHub's severity changes (e.g., goes from operational to degraded, or degraded to down), without having to ask.
+  - *AC*: P1, P2 satisfied; alert posted within one polling interval of the indicator changing.
 - **D2.** As a team member, I receive a recovery notice when GitHub comes back up.
   - *AC*: P3 satisfied.
-- **D3.** As an admin, I don't get spammed with repeated alerts during a prolonged outage.
-  - *AC*: P4 satisfied; exactly 1 alert per state transition.
+- **D3.** As an admin, I don't get spammed if GitHub stays degraded for 20 hours.
+  - *AC*: P4 satisfied; exactly 1 alert per indicator change, no matter how long the current state persists.
 
 ### Epic E — Check any dev tool on demand (Phase 3)
 - **E1.** As an engineer, I can type `@github_status_bot claude` and receive Claude's status without knowing which URL to visit.
@@ -241,7 +243,7 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - GitHub Status `incidents` array present but `started_at` missing → report down without duration.
 - Bot mentioned in a thread → reply in thread, not channel root.
 - Cold start exceeds Slack's 3s ack window → ack first, post reply after.
-- Phase 2: DynamoDB write fails during state transition → log error, do not post alert (avoids phantom alerts on next poll).
+- Phase 2: State file write fails after posting alert → log warning; accept risk of a duplicate alert on next poll (extremely rare). State file read fails → skip alert decision entirely, log error.
 - Phase 2: Poller and mention handler observe different states momentarily (race) → acceptable; each uses live data.
 - Phase 3: One service's API is unreachable while another's succeeds → reply includes the successful result and a "couldn't check [service]" line for the failed one; never suppress partial results.
 - Phase 3: A configured service's response shape diverges from the expected Statuspage.io schema → treat as a fetch error for that service; log the parse failure; other services unaffected.
@@ -279,7 +281,7 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 
 ### Risk Mitigation per Phase
 - **Phase 1**: GitHub Status API outage → bot reports "couldn't check"; never fails silently.
-- **Phase 2**: DynamoDB write failure on state change → do not post alert; log and retry next poll. Prevents phantom duplicate alerts on recovery.
+- **Phase 2**: State file write failure after posting → log warning; next poll may re-alert (acceptable — rare). State file read failure → skip alert decision, log error.
 
 ## 8. Definition of Done
 

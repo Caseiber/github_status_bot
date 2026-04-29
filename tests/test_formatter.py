@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from github_status_bot.formatter import _format_duration, format_reply, format_unknown_service_reply
+from github_status_bot.formatter import (
+    _format_duration,
+    format_recovery_alert,
+    format_reply,
+    format_unknown_service_reply,
+)
 from github_status_bot.verdict import VerdictResult
 
 _GH_NAME = "GitHub"
@@ -225,5 +230,24 @@ def test_format_unknown_service_reply_includes_token_and_services() -> None:
 def test_format_unknown_service_reply_bullets_all_names() -> None:
     result = format_unknown_service_reply("linear", ["GitHub", "Claude", "Linear"])
     assert result.count("•") == 3
+
+
+# ---------------------------------------------------------------------------
+# format_recovery_alert
+# ---------------------------------------------------------------------------
+
+
+def test_format_recovery_alert_contains_service_name() -> None:
+    result = format_recovery_alert("GitHub", "https://www.githubstatus.com")
+    assert "GitHub" in result
+    assert "back *up*" in result
+    assert "<https://www.githubstatus.com|GitHub's status page>" in result
+
+
+def test_format_recovery_alert_claude() -> None:
+    result = format_recovery_alert("Claude", "https://status.claude.com")
+    assert "Claude" in result
+    assert "back *up*" in result
+    assert "<https://status.claude.com|Claude's status page>" in result
 
 

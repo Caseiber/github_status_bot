@@ -58,6 +58,11 @@ def format_reply(verdict: VerdictResult, service_name: str, status_page_url: str
     return "\n".join(lines)
 
 
+def format_recovery_alert(service_name: str, status_page_url: str) -> str:
+    source = f"<{status_page_url}|{service_name}'s status page>"
+    return f"{service_name} is back *up*.\n\nSource: {source}"
+
+
 def format_unknown_service_reply(token: str, available_names: list[str]) -> str:
     bullets = "\n".join(f"• {name}" for name in available_names)
     return (

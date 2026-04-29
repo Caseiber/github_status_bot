@@ -66,7 +66,9 @@ def _mock_cl(httpx_mock: HTTPXMock, status: str, incidents: str, components: str
 
 
 def test_full_pipeline_github_up(httpx_mock: HTTPXMock) -> None:
-    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+    _mock_gh(
+        httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json"
+    )
 
     say = MagicMock()
     handle_mention(_channel_event(), say)
@@ -84,7 +86,9 @@ def test_full_pipeline_github_up(httpx_mock: HTTPXMock) -> None:
 
 
 def test_full_pipeline_github_down_with_component(httpx_mock: HTTPXMock) -> None:
-    _mock_gh(httpx_mock, "status_major.json", "unresolved_active.json", "components_partial_outage.json")
+    _mock_gh(
+        httpx_mock, "status_major.json", "unresolved_active.json", "components_partial_outage.json"
+    )
 
     say = MagicMock()
     handle_mention(_channel_event(), say)
@@ -104,7 +108,12 @@ def test_full_pipeline_github_down_with_component(httpx_mock: HTTPXMock) -> None
 
 
 def test_full_pipeline_struggling_missing_started_at(httpx_mock: HTTPXMock) -> None:
-    _mock_gh(httpx_mock, "status_minor.json", "unresolved_missing_started_at.json", "components_all_operational.json")
+    _mock_gh(
+        httpx_mock,
+        "status_minor.json",
+        "unresolved_missing_started_at.json",
+        "components_all_operational.json",
+    )
 
     say = MagicMock()
     handle_mention(_channel_event(), say)
@@ -164,7 +173,9 @@ def test_full_pipeline_api_unreachable(httpx_mock: HTTPXMock) -> None:
 
 
 def test_full_pipeline_thread_mention_replies_in_thread(httpx_mock: HTTPXMock) -> None:
-    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+    _mock_gh(
+        httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json"
+    )
 
     say = MagicMock()
     handle_mention(_thread_event(), say)
@@ -179,7 +190,9 @@ def test_full_pipeline_thread_mention_replies_in_thread(httpx_mock: HTTPXMock) -
 
 
 def test_full_pipeline_retry_event_suppressed(httpx_mock: HTTPXMock) -> None:
-    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+    _mock_gh(
+        httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json"
+    )
 
     say = MagicMock()
     original = _channel_event()
@@ -197,8 +210,12 @@ def test_full_pipeline_retry_event_suppressed(httpx_mock: HTTPXMock) -> None:
 
 
 def test_two_distinct_mentions_both_answered(httpx_mock: HTTPXMock) -> None:
-    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
-    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+    _mock_gh(
+        httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json"
+    )
+    _mock_gh(
+        httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json"
+    )
 
     say = MagicMock()
     first = _channel_event()
@@ -216,7 +233,9 @@ def test_two_distinct_mentions_both_answered(httpx_mock: HTTPXMock) -> None:
 
 
 def test_full_pipeline_bare_mention_defaults_to_github(httpx_mock: HTTPXMock) -> None:
-    _mock_gh(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+    _mock_gh(
+        httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json"
+    )
 
     say = MagicMock()
     handle_mention(_bare_event(), say)
@@ -250,7 +269,9 @@ def test_full_pipeline_unknown_service_returns_error(httpx_mock: HTTPXMock) -> N
 
 
 def test_full_pipeline_claude_up(httpx_mock: HTTPXMock) -> None:
-    _mock_cl(httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json")
+    _mock_cl(
+        httpx_mock, "status_none.json", "unresolved_empty.json", "components_all_operational.json"
+    )
 
     say = MagicMock()
     event = {**_channel_event(), "event_id": "Ev01CLAUDE01", "text": "<@U99999BOTID> claude"}
