@@ -103,7 +103,7 @@ def test_full_pipeline_github_down_with_component(httpx_mock: HTTPXMock) -> None
 # ---------------------------------------------------------------------------
 
 
-def test_full_pipeline_down_missing_started_at(httpx_mock: HTTPXMock) -> None:
+def test_full_pipeline_struggling_missing_started_at(httpx_mock: HTTPXMock) -> None:
     _mock_gh(httpx_mock, "status_minor.json", "unresolved_missing_started_at.json", "components_all_operational.json")
 
     say = MagicMock()
@@ -111,7 +111,8 @@ def test_full_pipeline_down_missing_started_at(httpx_mock: HTTPXMock) -> None:
 
     say.assert_called_once()
     text = say.call_args.kwargs["text"]
-    assert "*down*" in text
+    assert "*struggling*" in text
+    assert "*down*" not in text
     assert "Severity: Degraded" in text
     assert "Time Down:" not in text
 

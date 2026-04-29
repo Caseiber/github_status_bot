@@ -94,12 +94,13 @@ def test_format_reply_down_with_duration() -> None:
     )
 
 
-def test_format_reply_down_with_short_duration() -> None:
+def test_format_reply_struggling_with_short_duration() -> None:
     result = format_reply(
         _verdict(is_down=True, indicator="minor", duration_seconds=45), _GH_NAME, _GH_URL
     )
     assert "less than a minute" in result
-    assert "*down*" in result
+    assert "*struggling*" in result
+    assert "*down*" not in result
 
 
 # ---------------------------------------------------------------------------

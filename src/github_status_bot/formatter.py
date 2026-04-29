@@ -36,7 +36,10 @@ def format_reply(verdict: VerdictResult, service_name: str, status_page_url: str
     if not verdict.is_down:
         return f"{service_name} appears to be *up*... for NOW.\n\nSource: {source}"
 
-    lines = [f"{service_name} is *down* because AI DevOps is a blight on our land.", ""]
+    if verdict.indicator == "minor":
+        lines = [f"{service_name} is *struggling* — some services are degraded.", ""]
+    else:
+        lines = [f"{service_name} is *down* because AI DevOps is a blight on our land.", ""]
 
     if len(verdict.affected_components) == 1:
         lines.append(f"Affected Area: {verdict.affected_components[0]}")

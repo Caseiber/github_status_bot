@@ -245,9 +245,9 @@ feat/t031-poller
 ### Before Every Commit
 
 ```bash
-uv run ruff check src/ tests/
-uv run mypy --strict src/
-uv run pytest --cov=src --cov-report=term-missing
+/workspace/.venv/bin/ruff check src/ tests/
+/workspace/.venv/bin/mypy --strict src/
+/workspace/.venv/bin/pytest --cov=src --cov-report=term-missing
 ```
 
 All three must pass. Fix failures before committing — do not use `--no-verify`.
@@ -314,17 +314,17 @@ github_status_bot/
 # Install dependencies
 uv sync
 
-# Run tests
-uv run pytest
+# Run tests — uv is NOT available in the Claude Code sandbox; use the venv directly
+/workspace/.venv/bin/pytest tests/ -q
 
 # Run tests with coverage
-uv run pytest --cov=src --cov-report=term-missing
+/workspace/.venv/bin/pytest --cov=src --cov-report=term-missing
 
 # Lint
-uv run ruff check src/ tests/
+/workspace/.venv/bin/ruff check src/ tests/
 
 # Type check
-uv run mypy --strict src/
+/workspace/.venv/bin/mypy --strict src/
 
 # Start the bot in a persistent tmux session (survives terminal close)
 # Install tmux first if needed: brew install tmux (Mac) or sudo apt-get install -y tmux (Linux)
