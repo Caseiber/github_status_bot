@@ -227,6 +227,23 @@ def test_full_pipeline_bare_mention_defaults_to_github(httpx_mock: HTTPXMock) ->
 
 
 # ---------------------------------------------------------------------------
+# Unknown service keyword — error reply, no HTTP fetch
+# ---------------------------------------------------------------------------
+
+
+def test_full_pipeline_unknown_service_returns_error(httpx_mock: HTTPXMock) -> None:
+    say = MagicMock()
+    event = {**_channel_event(), "event_id": "Ev01UNKNOWN1", "text": "<@U99999BOTID> jenkins"}
+    handle_mention(event, say)
+
+    say.assert_called_once()
+    text = say.call_args.kwargs["text"]
+    assert "jenkins" in text
+    assert "Caroline" in text
+    assert httpx_mock.get_requests() == []  # no HTTP calls made
+
+
+# ---------------------------------------------------------------------------
 # Claude named service
 # ---------------------------------------------------------------------------
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from github_status_bot.formatter import _format_duration, format_reply
+from github_status_bot.formatter import _format_duration, format_reply, format_unknown_service_reply
 from github_status_bot.verdict import VerdictResult
 
 _GH_NAME = "GitHub"
@@ -206,5 +206,23 @@ def test_format_reply_uses_service_name_in_down_message() -> None:
 def test_format_reply_uses_service_name_in_fetch_error() -> None:
     result = format_reply(_verdict(has_fetch_error=True), "Claude", "https://status.claude.com")
     assert "Claude's status" in result
+
+
+# ---------------------------------------------------------------------------
+# format_unknown_service_reply
+# ---------------------------------------------------------------------------
+
+
+def test_format_unknown_service_reply_includes_token_and_services() -> None:
+    result = format_unknown_service_reply("jenkins", ["GitHub", "Claude"])
+    assert "*jenkins*" in result
+    assert "• GitHub" in result
+    assert "• Claude" in result
+    assert "Caroline" in result
+
+
+def test_format_unknown_service_reply_bullets_all_names() -> None:
+    result = format_unknown_service_reply("linear", ["GitHub", "Claude", "Linear"])
+    assert result.count("•") == 3
 
 

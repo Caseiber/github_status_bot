@@ -9,7 +9,7 @@ import re
 import time
 from typing import Any
 
-from github_status_bot.formatter import format_reply
+from github_status_bot.formatter import format_reply, format_unknown_service_reply
 from github_status_bot.github_status import fetch_service_status
 from github_status_bot.services import SERVICES
 from github_status_bot.verdict import compute_verdict
@@ -53,14 +53,10 @@ _UNEXPECTED_ERROR_REPLY = (
 )
 
 
-def _parse_service(text: str) -> str | None:
-    """Return the service keyword from the mention text, or None for a bare mention."""
+def _parse_token(text: str) -> str | None:
+    """Return the first word after the @mention (lowercased), or None for a bare mention."""
     m = _SERVICE_RE.search(text)
-    if m:
-        token = m.group(1).lower()
-        if token in _SERVICE_KEYS:
-            return token
-    return None
+    return m.group(1).lower() if m else None
 
 
 # ---------------------------------------------------------------------------
@@ -74,21 +70,24 @@ def handle_mention(event: dict[str, Any], say: Any) -> None:
     thread_ts: str | None = event.get("thread_ts")  # T017
 
     raw_text: str = event.get("text", "")
-    service_key = _parse_service(raw_text)
-    logger.info("Received event ts=%s channel=%s service=%r", event_id, channel, service_key)
+    token = _parse_token(raw_text)
+    logger.info("Received event ts=%s channel=%s token=%r", event_id, channel, token)
 
     if _is_duplicate(event_id):
         logger.info("Suppressed duplicate event ts=%s", event_id)
         return
 
-    try:
-        cfg = SERVICES[service_key or "github"]
-        status = asyncio.run(fetch_service_status(cfg.base_url))
-        verdict = compute_verdict(status, cfg.ignored_components)
-        text = format_reply(verdict, cfg.display_name, cfg.status_page_url)
-    except Exception:
-        logger.exception("Unexpected error in handle_mention")
-        text = _UNEXPECTED_ERROR_REPLY
+    if token is not None and token not in _SERVICE_KEYS:
+        text = format_unknown_service_reply(token, [cfg.display_name for cfg in SERVICES.values()])
+    else:
+        try:
+            cfg = SERVICES[token or "github"]
+            status = asyncio.run(fetch_service_status(cfg.base_url))
+            verdict = compute_verdict(status, cfg.ignored_components)
+            text = format_reply(verdict, cfg.display_name, cfg.status_page_url)
+        except Exception:
+            logger.exception("Unexpected error in handle_mention")
+            text = _UNEXPECTED_ERROR_REPLY
 
     kwargs: dict[str, Any] = {"text": text}
     if thread_ts:

@@ -169,8 +169,17 @@ def test_named_service_claude(say: MagicMock) -> None:
     assert "Claude" in text
 
 
-def test_unknown_service_keyword_defaults_to_github(mock_fetch: AsyncMock, say: MagicMock) -> None:
-    handle_mention(_event("1000.0001", text="<@U1> jenkins"), say)
-    assert mock_fetch.call_count == 1
+def test_unknown_service_keyword_returns_error(say: MagicMock) -> None:
+    with patch(
+        "github_status_bot.slack_handler.fetch_service_status",
+        new_callable=AsyncMock,
+        return_value=_UP_RESPONSE,
+    ) as mock:
+        handle_mention(_event("1000.0001", text="<@U1> jenkins"), say)
+
+    mock.assert_not_called()
     text = say.call_args.kwargs["text"]
-    assert "GitHub" in text
+    assert "jenkins" in text
+    assert "GitHub" in text  # listed as available service
+    assert "Claude" in text  # listed as available service
+    assert "Caroline" in text
