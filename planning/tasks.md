@@ -13,7 +13,7 @@
 | E002: GitHub Status Client | 3 | 3 | 0 | 0 |
 | E003: Verdict Engine | 2 | 2 | 0 | 0 |
 | E004: Slack Bot | 4 | 4 | 0 | 0 |
-| E005: Resilience & Edge Cases | 5 | 5 | 0 | 0 |
+| E005: Resilience & Edge Cases | 4 | 4 | 0 | 0 |
 | E006: Integration Tests | 3 | 3 | 0 | 0 |
 | E007: Phase 1 Launch | 1 | 1 | 0 | 0 |
 | E008: Phase 1 Validation | 2 | 2 | 0 | 0 |
@@ -23,7 +23,7 @@
 | E012: Phase 3 — Service Abstraction | 3 | 3 | 0 | 0 |
 | E013: Phase 3 — Handler Routing | 2 | 2 | 0 | 0 |
 | E014: Phase 3 — Validation | 1 | 0 | 0 | 1 |
-| **Total** | **36** | **28** | **0** | **8** |
+| **Total** | **35** | **27** | **0** | **8** |
 
 **Last Updated**: 2026-04-28
 
@@ -421,14 +421,15 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 **Acceptance Criteria**:
 
-- [x] Same `event_id` received twice → only one `chat.postMessage` call
-- [x] In-memory cache of recently seen `event_id` values (TTL ≥ 60s, capacity ≥ 100)
-- [x] Different `event_id` with same text → two replies (idempotency is on ID, not content)
+- [x] Same message `ts` received twice → only one `chat.postMessage` call
+- [x] In-memory cache of recently seen `ts` values (TTL ≥ 60s, capacity ≥ 100)
+- [x] Different `ts` values → each gets a reply
+- [x] **Implementation note**: uses `event.get("ts")`, not `event_id` — slack-bolt passes only the inner event object to handlers; `event_id` lives in the outer envelope and is not available. `ts` is unique per message and stable across Slack retries.
 
 **Testing Requirements**:
 
-- [x] Unit test: duplicate `event_id` → one post
-- [x] Unit test: distinct `event_id` → two posts
+- [x] Unit test: duplicate `ts` → one post
+- [x] Unit test: distinct `ts` values → two posts
 
 **Definition of Done**:
 
@@ -442,29 +443,14 @@ Phase 1 and Phase 3 core implementation are complete. Next up:
 
 #### Task T016: Per-channel rate-limit guard
 
-**Priority**: Medium
-**Effort**: 1 hour
-**Dependencies**: T010
-**PRD Reference**: §4 Security & Performance
-
-**Acceptance Criteria**:
-
-- [x] After replying in a channel, bot ignores further mentions in that channel for 5 seconds
-- [x] Cooldown is per-channel (channel A blocked does not affect channel B)
-- [x] In-memory dict of `{channel_id: last_reply_ts}`
-
-**Testing Requirements**:
-
-- [x] Unit test: two mentions same channel within 5s → one reply
-- [x] Unit test: mentions in two channels within 5s → two replies
-
-**Definition of Done**:
-
-- [x] All acceptance criteria met; unit tests passing
+> **Removed.** Implemented and then reverted. A 5-second per-channel cooldown caused silent drops during
+> normal back-to-back usage (e.g. mentioning the bot twice in quick succession with different service names).
+> For a small team, two simultaneous replies is less disruptive than silently ignoring legitimate mentions.
+> Idempotency (T015) is sufficient — no time-based throttling in the codebase.
 
 **Git Workflow**:
 
-- Branch: `feat/t016-rate-limit-guard`
+- Branch: `feat/phase3-multi-service` (removed in this branch)
 
 ---
 

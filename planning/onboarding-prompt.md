@@ -1,8 +1,8 @@
 # Claude Code Onboarding — github_status_bot
 
-You are continuing development on **`github_status_bot`**, a Slack bot that tells engineers whether GitHub is currently
-down by checking GitHub's official status API. This document is your complete orientation — read it fully before writing
-any code.
+You are continuing development on **`github_status_bot`**, a Slack bot that tells engineers whether GitHub or Claude is
+currently down by checking their official status APIs. This document is your complete orientation — read it fully before
+writing any code.
 
 ---
 
@@ -10,46 +10,57 @@ any code.
 
 - [ ] Read this document top to bottom
 - [ ] Read `planning/prd.md` (the authoritative requirements document)
-- [ ] Confirm you understand the two-phase scope before touching any feature code
+- [ ] Read `planning/tasks.md` to find the current task status
 - [ ] Check `git status` and `git log --oneline -10` to orient yourself
 
 ---
 
 ## Project Overview
 
-**What it is**: A Slack bot that responds when `@github_status_bot` is mentioned in a channel, fetches GitHub's own
-status API in real time, and replies with a clear up/down verdict, the source, and how long the outage has been
-ongoing (if applicable).
+**What it is**: A Slack bot that responds when `@github_status_bot` is mentioned in a channel. It fetches the named
+service's status API in real time and replies with a clear up/down verdict, affected components, severity, duration, and
+source. Supports GitHub and Claude out of the box; adding a new service requires one line in `services.py`.
 
-**What it is NOT**: It does not use Down Detector or any source other than GitHub's official Statuspage API. It does not
-proactively post anything in Phase 1.
+**What it is NOT**: Does not use Down Detector or any unofficial source. Does not proactively post anything in Phase 1.
 
-**Vision**: Give engineers an instant, authoritative answer to "is GitHub actually down?" without leaving Slack — and (
-in Phase 2) alert the team proactively when GitHub reports an outage.
+**Vision**: Give engineers an instant, authoritative answer to "is [service] actually down?" without leaving Slack — and
+(in Phase 2) alert the team proactively when any configured service reports an outage.
 
-**Current status**: Phase 1 in progress. E001–E005 complete (T001, T002, T004–T017). Component-level status display added (components endpoint, `affected_components` in verdict, structured formatter output). Next: T018 (Slack event payload fixtures), T019 (integration tests), T020 (coverage gates), T021 (run persistently), T027 (README).
+**Current status**: Phase 1 complete. Phase 3 (multi-service support) core implemented on branch
+`feat/phase3-multi-service`. Phase 2 (proactive alerting) not yet started — do not begin until Phase 1 has been stable
+for ≥2 weeks.
 
 ---
 
-## Two-Phase Scope
+## Three-Phase Scope
 
-### Phase 1 — On-Demand Bot (build this first)
+### Phase 1 — On-Demand Bot (complete)
 
 Bot is silent until `@`-mentioned. On mention:
 
-1. Fetches `https://www.githubstatus.com/api/v2/status.json`
-2. Fetches `https://www.githubstatus.com/api/v2/incidents/unresolved.json` (concurrent with step 1)
-3. Fetches `https://www.githubstatus.com/api/v2/components.json` (optional — failure returns `components=[]`)
+1. Parses service name from mention text (e.g. `github`, `claude`)
+2. Fetches `{base_url}/status.json` + `{base_url}/incidents/unresolved.json` concurrently (2s timeout)
+3. Fetches `{base_url}/components.json` (optional — failure returns `components=[]`)
 4. Replies once in the same channel/thread with verdict + affected components + severity + duration + source
+
+For bare mentions (no service name), replies with a compact one-line-per-service summary and a hint.
 
 **Requirements**: F1–F5 in `planning/prd.md`. No database. No polling. No scheduled work.
 
-### Phase 2 — Proactive Alerting (do NOT start until Phase 1 is stable for ≥2 weeks)
+### Phase 3 — Multi-Service Support (core implemented, pending live validation)
 
-A separate EventBridge-triggered Lambda polls GitHub Status every `POLL_INTERVAL_MINUTES` (default: 5) and posts to
-`ALERT_CHANNEL_ID` when status transitions between up and down. Adds DynamoDB for deduplication state.
+Service registry in `services.py` maps short names (`github`, `claude`) to Statuspage.io base URLs and config.
+Named mentions (`@bot github`) return full detail for that service. Bare mentions return a compact summary for all
+services. Implemented out of order before Phase 2.
 
-**Requirements**: P1–P5 in `planning/prd.md`. Phase 1 Lambda is untouched.
+**Requirements**: M1–M6 in `planning/prd.md`.
+
+### Phase 2 — Proactive Alerting (do NOT start until Phase 1 stable for ≥2 weeks)
+
+A background `asyncio` task in the same process polls all configured services every `POLL_INTERVAL_MINUTES` (default: 5)
+and posts to `ALERT_CHANNEL_ID` when any service transitions between up and down. State persisted in a JSON file on disk.
+
+**Requirements**: P1–P5 in `planning/prd.md`.
 
 ---
 
@@ -71,85 +82,83 @@ A separate EventBridge-triggered Lambda polls GitHub Status every `POLL_INTERVAL
 
 ---
 
-## Architecture — Phase 1
+## Architecture — Phase 1 / Phase 3
 
 ```
 Slack mention
     → Slack WebSocket (socket mode, outbound connection managed by slack-bolt)
     → local process (slack_handler.py)
         1. Receive app_mention event
-        2. Concurrent fetches: status.json + unresolved.json (2s timeout each)
-        3. Compute verdict
-        4. POST chat.postMessage
+        2. Parse service name from event text
+        3a. Named service (e.g. "github"): fetch that service's 3 endpoints
+        3b. Bare mention: fetch all services concurrently, build compact summary
+        4. Compute verdict per service (using ServiceConfig.ignored_components)
+        5. POST chat.postMessage
 ```
 
-**No database. No inbound HTTP. No cloud infrastructure. Everything is stateless.**
+**No database. No inbound HTTP. No cloud infrastructure. Stateless except for the idempotency cache.**
 
-## Architecture — Phase 2 (additive — same process)
+### Phase 2 (additive — same process)
 
 ```
 asyncio.create_task(run_poller(app))  ← started alongside socket-mode handler
     every POLL_INTERVAL_MINUTES:
-        1. Fetch status.json + unresolved.json
-        2. Read gh_status_state.json from disk
-        3. If status changed → post alert/recovery to ALERT_CHANNEL_ID → write new state
+        1. Fetch all services
+        2. Read state file from disk (keyed by service name)
+        3. If any service transitioned → post alert/recovery to ALERT_CHANNEL_ID → write new state
         4. If unchanged → no-op
 ```
 
 ---
 
-## Key GitHub Status API Facts
+## Key API Facts
 
-Verified during PRD research — these are the actual response shapes:
+All configured services use the Statuspage.io API shape. Endpoints are derived from a `base_url`:
 
-**`status.json`**
-
+**`{base_url}/status.json`**
 ```json
-{
-  "status": {
-    "indicator": "none | minor | major | critical",
-    "description": "All Systems Operational"
-  }
+{ "status": { "indicator": "none | minor | major | critical" } }
+```
+"Down" = indicator is `minor`, `major`, or `critical`.
+
+**`{base_url}/incidents/unresolved.json`**
+```json
+{ "incidents": [{ "id": "...", "started_at": "...", "resolved_at": null }] }
+```
+"Down" also triggered by any incident with `resolved_at: null`. Duration from `started_at` — never `created_at`.
+If `started_at` is missing, report down without duration.
+
+**`{base_url}/components.json`**
+```json
+{ "components": [{ "name": "Git Operations", "status": "operational | degraded_performance | partial_outage | major_outage" }] }
+```
+Non-operational statuses are surfaced as `affected_components`. Some components are ignored per service
+(configured in `ServiceConfig.ignored_components` in `services.py`). GitHub ignores: Pages, Webhooks,
+Codespaces, Copilot AI Model Providers.
+
+---
+
+## Service Registry
+
+Defined in `src/github_status_bot/services.py`:
+
+```python
+SERVICES: dict[str, ServiceConfig] = {
+    "github": ServiceConfig(
+        display_name="GitHub",
+        base_url="https://www.githubstatus.com/api/v2",
+        status_page_url="https://www.githubstatus.com",
+        ignored_components=frozenset({"Pages", "Webhooks", "Codespaces", "Copilot AI Model Providers"}),
+    ),
+    "claude": ServiceConfig(
+        display_name="Claude",
+        base_url="https://status.claude.com/api/v2",
+        status_page_url="https://status.claude.com",
+    ),
 }
 ```
 
-"Down" = `indicator` is `minor`, `major`, or `critical`.
-
-**`unresolved.json`**
-
-```json
-{
-  "incidents": [
-    {
-      "id": "...",
-      "status": "investigating | identified | monitoring",
-      "started_at": "2026-04-27T16:31:07.236Z",
-      "resolved_at": null
-    }
-  ]
-}
-```
-
-"Down" also triggered by any incident with `resolved_at: null`. Duration comes from `started_at` (not `created_at`). If
-`started_at` is missing, report down without duration — never fabricate.
-
-**`components.json`**
-
-```json
-{
-  "components": [
-    {
-      "id": "...",
-      "name": "Git Operations",
-      "status": "operational | degraded_performance | partial_outage | major_outage"
-    }
-  ]
-}
-```
-
-Fetched separately after `status.json`/`unresolved.json`. Failure is non-fatal — bot replies with `components=[]`.
-Non-operational statuses (`degraded_performance`, `partial_outage`, `major_outage`) are surfaced as `affected_components`
-in the verdict and rendered as the `Affected Area` line in the reply.
+To add a new service: add one entry here and restart the bot.
 
 ---
 
@@ -163,26 +172,20 @@ else:
     verdict = UP
 ```
 
-The verdict module must have **100% unit test coverage**. Test matrix:
-
-- `indicator=none`, empty incidents → UP
-- `indicator=major`, no incidents → DOWN, no duration
-- `indicator=none`, incident with `resolved_at=null` and valid `started_at` → DOWN with duration
-- `indicator=none`, incident with `resolved_at=null` and missing `started_at` → DOWN, no duration
-- GitHub Status API unreachable → reply "couldn't check right now" — never fake UP
+The verdict module must have **100% unit test coverage**.
 
 ---
 
-## Reply Format
+## Reply Formats
 
-**When up:**
+**Named service — up** (`@bot github`):
 ```
 GitHub appears to be *up*... for NOW.
 
 Source: <https://www.githubstatus.com|GitHub's status page>
 ```
 
-**When down (with affected components and duration):**
+**Named service — down** (`@bot github`):
 ```
 GitHub is *down* because AI DevOps is a blight on our land.
 
@@ -193,15 +196,33 @@ Time Down: ~2h 12m
 Source: <https://www.githubstatus.com|GitHub's status page>
 ```
 
-`Affected Area` is omitted when all components are operational or the components endpoint failed.
-`Time Down` is omitted when no `started_at` is available.
+`Affected Area` omitted when all components are operational or components endpoint failed.
+`Time Down` omitted when no `started_at` is available.
 Severity labels: `minor` → `Degraded`, `major` → `Major Outage`, `critical` → `Critical Outage`.
-Source is a Slack mrkdwn hyperlink.
 
-**When API unreachable:**
+**Bare mention** (`@bot` with no service name):
+```
+*GitHub*: up
+*Claude*: down — Major Outage, ~12m
+
+Tag with a service name for more detail, e.g. `@github_status_bot github`
+```
+
+**API unreachable** (named service):
 ```
 Couldn't check GitHub's status right now — the status API didn't respond. Try again in a moment.
 ```
+
+---
+
+## Idempotency
+
+The handler deduplicates Slack event retries using the message `ts` field (from the inner event object — slack-bolt
+does **not** expose `event_id` in the inner event dict; it lives only in the outer envelope). Each `ts` is recorded in
+an in-memory cache (TTL 60s, capacity 100). The same message `ts` seen twice produces only one reply.
+
+There is **no per-channel rate-limit cooldown** — every distinct mention gets a reply regardless of timing. Duplicate
+suppression is idempotency-only (same Slack retry), not time-based throttling.
 
 ---
 
@@ -220,8 +241,8 @@ Couldn't check GitHub's status right now — the status API didn't respond. Try 
 ```
 feat/t013-error-handling
 feat/t015-idempotency
-feat/t016-rate-limit-guard
 feat/t019-integration-tests
+feat/phase3-multi-service
 feat/t031-poller
 ```
 
@@ -238,47 +259,55 @@ All three must pass. Fix failures before committing — do not use `--no-verify`
 ### Testing Standards
 
 - Unit tests mock all external HTTP (`pytest-httpx`) — no live network calls in unit suite
-- Live calls only in an integration suite tagged `@pytest.mark.integration`
 - Coverage target: ≥85% overall, **100%** on the verdict module and (Phase 2) state-transition module
-- Fixture JSONs for GitHub Status responses committed to `tests/fixtures/`
+- Fixture JSONs for API responses committed to `tests/fixtures/`
+- Slack event fixtures use `ts` as the unique key (not `event_id`)
 
 ---
 
-## Project Structure (target)
+## Project Structure
 
 ```
 github_status_bot/
 ├── planning/
 │   ├── prd.md                    ← authoritative requirements
+│   ├── tasks.md                  ← task list with status
 │   └── onboarding-prompt.md      ← this file
 ├── src/
 │   └── github_status_bot/
 │       ├── __init__.py           ✅ done
-│       ├── github_status.py      ✅ done — fetches status, incidents, components; Component dataclass
-│       ├── verdict.py            ✅ done — pure verdict logic incl. affected_components (100% coverage)
-│       ├── formatter.py          ✅ done — structured multi-line reply w/ Slack hyperlink (100% coverage)
-│       ├── slack_handler.py      ✅ done — socket-mode handler, idempotency, rate-limit, thread-aware
+│       ├── services.py           ✅ done — ServiceConfig dataclass + SERVICES registry
+│       ├── github_status.py      ✅ done — fetch_service_status(base_url); Component/Incident/ServiceStatusResponse
+│       ├── verdict.py            ✅ done — pure verdict logic incl. ignored_components param (100% coverage)
+│       ├── formatter.py          ✅ done — format_reply, format_summary_line, format_summary_reply (100% coverage)
+│       ├── slack_handler.py      ✅ done — service routing, idempotency (ts-based), thread-aware replies
 │       └── poller.py             ← Phase 2 asyncio background task (not yet written)
 ├── tests/
 │   ├── fixtures/
-│   │   ├── status_none.json                   ✅ done
-│   │   ├── status_minor.json                  ✅ done
-│   │   ├── status_major.json                  ✅ done
-│   │   ├── unresolved_empty.json              ✅ done
-│   │   ├── unresolved_active.json             ✅ done
-│   │   ├── unresolved_missing_started_at.json ✅ done
-│   │   ├── components_all_operational.json    ✅ done
-│   │   └── components_partial_outage.json     ✅ done
-│   ├── test_github_status.py     ✅ done (27 tests, 100% coverage)
-│   ├── test_verdict.py           ✅ done (18 tests, 100% coverage)
-│   ├── test_formatter.py         ✅ done (17 tests, 100% coverage)
-│   ├── test_slack_handler.py     ✅ done (7 tests — T015/T016/T017)
+│   │   ├── status_none.json                   ✅
+│   │   ├── status_minor.json                  ✅
+│   │   ├── status_major.json                  ✅
+│   │   ├── unresolved_empty.json              ✅
+│   │   ├── unresolved_active.json             ✅
+│   │   ├── unresolved_missing_started_at.json ✅
+│   │   ├── components_all_operational.json    ✅
+│   │   ├── components_partial_outage.json     ✅
+│   │   ├── slack_mention_channel.json         ✅ (text includes service name)
+│   │   ├── slack_mention_thread.json          ✅
+│   │   ├── slack_mention_retry.json           ✅ (same ts as channel — simulates Slack retry)
+│   │   └── slack_mention_bare.json            ✅ (no service name — triggers summary)
+│   ├── conftest.py               ✅ resets _seen_events between tests
+│   ├── test_github_status.py     ✅ (fetch_service_status, 100% coverage)
+│   ├── test_verdict.py           ✅ (100% coverage)
+│   ├── test_formatter.py         ✅ (format_reply + summary functions, 100% coverage)
+│   ├── test_slack_handler.py     ✅ (T015/T017 + service routing)
+│   ├── test_integration.py       ✅ (full pipeline, all services)
 │   └── test_poller.py            ← Phase 2 (T033)
-├── slack_app_manifest.yaml       ✅ done
-├── .env.example                  ✅ done
-├── Makefile                      ✅ done
-├── pyproject.toml                ✅ done
-└── README.md                     ← to be written (T027)
+├── slack_app_manifest.yaml       ✅
+├── .env.example                  ✅
+├── Makefile                      ✅
+├── pyproject.toml                ✅
+└── README.md                     ✅
 ```
 
 ---
@@ -333,15 +362,18 @@ variables.
 
 ## Key Constraints to Remember
 
-1. **Bot speaks only when tagged (Phase 1)** — zero unsolicited messages is a hard success metric.
+1. **Bot speaks only when tagged (Phase 1/3)** — zero unsolicited messages is a hard success metric.
 2. **Never fabricate status** — if the API is unreachable, say so explicitly. A fake "up" during a real outage
    permanently destroys trust.
 3. **Exactly one reply per mention** — no reactions, no DMs, no follow-ups.
 4. **`started_at` not `created_at`** — use `started_at` for duration; both fields exist in the incidents response.
-5. **Phase 2 is additive** — the Phase 1 handler must not be modified when building Phase 2.
-6. **Phase 2 deduplication** — one alert per status transition, not one per poll. JSON state file on disk is the gate.
-7. **No cloud infrastructure** — the bot runs as a local process via socket mode. No Lambda, API Gateway, SAM, or AWS
-   accounts required.
+5. **Idempotency key is `ts`** — slack-bolt does not expose `event_id` in the inner event dict. Use `event.get("ts")`
+   for deduplication. The idempotency cache is in-memory only (no persistence across restarts).
+6. **No time-based rate limiting** — every distinct mention gets a reply. The only suppression is Slack retry
+   deduplication via `ts`.
+7. **Phase 2 is additive** — the Phase 1/3 handler must not be modified when building Phase 2.
+8. **Phase 2 deduplication** — one alert per status transition, not one per poll. JSON state file on disk is the gate.
+9. **No cloud infrastructure** — the bot runs as a local process via socket mode. No Lambda, API Gateway, or AWS.
 
 ---
 
@@ -351,9 +383,7 @@ variables.
 |---------------------------------------------|------------------------------------|
 | Full requirements + acceptance criteria     | `planning/prd.md`                  |
 | Task list with status and DoD               | `planning/tasks.md`                |
-| Coding standards, PR process, quality gates | `ai/development-guidelines.md`     |
-| GitHub Status API structure (verified live) | §4 API Design in `planning/prd.md` |
-| Phase 1 roadmap (day-by-day)                | §7 in `planning/prd.md`            |
-| Phase 2 roadmap                             | §7 in `planning/prd.md`            |
+| GitHub/Claude Status API structure          | §4 API Design in `planning/prd.md` |
+| Phase 1–3 roadmap                           | §7 in `planning/prd.md`            |
 | Risk register                               | §10 in `planning/prd.md`           |
 | Environment variables                       | `.env.example` in repo root        |

@@ -181,7 +181,6 @@ This is internal tooling, not a market product. The "opportunity" is reclaiming 
 - **Authentication**: socket mode uses an app-level token (`xapp-...`) to authenticate the WebSocket connection. Slack initiates no inbound HTTP, so there is no per-request signature to verify.
 - **No PII** is processed or logged. Channel/user IDs may appear in logs only at DEBUG level.
 - **Secrets** never in source or committed files; stored in `.env` on the host machine only.
-- **Rate limiting (Phase 1)**: per-channel cooldown of 5 seconds to prevent spam loops.
 - **Timeouts**: 2s per GitHub Status endpoint.
 - **Retries**: one retry per endpoint on transient failure (5xx, timeout); after that, treat as unavailable.
 
